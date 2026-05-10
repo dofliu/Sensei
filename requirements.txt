@@ -1,0 +1,28 @@
+# Sensei dependencies — Python 3.11+ recommended
+# ------------------------------------------------
+# Prereq (one-time, NOT in pip):
+#   1. Install Ollama from https://ollama.com  (Windows/Mac/Linux)
+#   2. ollama pull gemma4:e2b   (or gemma4:e4b)
+#
+# Then for PyTorch (Faster-Whisper needs it; CUDA build for GPU):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+#
+# Then:
+#   pip install -r requirements.txt
+
+# ASR
+faster-whisper>=1.0.3
+
+# LLM (Ollama Python client; talks to local Ollama daemon)
+ollama>=0.3.0
+
+# Schema validation
+pydantic>=2.6.0
+
+# UI
+gradio>=5.0.0
+
+# Audio I/O (for live mic mode in Phase 2)
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.26

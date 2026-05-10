@@ -1,0 +1,41 @@
+Sensei — On-Device AI Co-Teacher
+Copyright (c) 2026 Liu Jui-Hung (劉瑞弘) <moredof@gmail.com>
+DOF Lab, Department of Intelligent Automation Engineering,
+National Chin-Yi University of Technology (NCUT), Taiwan.
+
+This work is licensed under the Creative Commons Attribution 4.0
+International License (CC-BY 4.0).
+
+You are free to:
+
+  * Share — copy and redistribute the material in any medium or format
+  * Adapt — remix, transform, and build upon the material for any purpose,
+            including commercially.
+
+Under the following terms:
+
+  * Attribution — You must give appropriate credit, provide a link to the
+                  license, and indicate if changes were made. You may do so
+                  in any reasonable manner, but not in any way that suggests
+                  the licensor endorses you or your use.
+
+No additional restrictions — You may not apply legal terms or technological
+measures that legally restrict others from doing anything the license permits.
+
+Notices:
+
+  * Pretrained models bundled or invoked at runtime (Google Gemma 4,
+    Faster-Whisper / Whisper large-v3) remain under their respective
+    upstream licenses and are NOT relicensed by this work.
+  * Third-party Python libraries used at runtime (gradio, fastapi, pydantic,
+    ollama, faster-whisper, etc.) retain their original OSI-approved licenses.
+
+Full legal text of CC-BY 4.0:
+  https://creativecommons.org/licenses/by/4.0/legalcode
+
+Human-readable summary of CC-BY 4.0:
+  https://creativecommons.org/licenses/by/4.0/
+
+This license is required by the rules of "The Gemma 4 Good Hackathon"
+(Kaggle × Google LLC, 2026), §1.6 and §2.5.a, which mandate CC-BY 4.0
+for the winning Submission and the source code used to generate it.

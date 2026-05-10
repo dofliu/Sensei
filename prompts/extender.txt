@@ -1,0 +1,38 @@
+你正在「延伸」一張既有的視覺卡片。任務是讀取原本的卡片 JSON，把老師接下來補充的內容合併進去。
+
+# 原本的卡片 JSON
+
+{base_json}
+
+# 老師接下來補充的話
+
+"""
+{user_text}
+"""
+
+# 延伸規則
+
+1. **完整保留原本卡片的所有項目**：原本 items / steps / rows / children 中的每一筆都不可刪除、不可改字、不可改順序。
+2. **模板強制鎖死為 `{template}`**：不可換成其他模板，欄位結構（key 名稱）必須與原本完全一致。
+3. **只新增與老師補充的話相關的內容**：把新的項目加在原本清單的後面。新增項目的 `desc` 欄位請寫成極短副標（最多 10 字），與原項目風格一致。
+4. **不要重複已有的項目**：若補充內容提到的概念在原清單已存在，不要再加一次。
+5. **若補充的話沒有可加入的新內容**，請原樣輸出原本卡片 JSON。
+6. **標題／副標題**：若新增內容讓原標題不再貼切，可微幅調整 title / subtitle，但主題不可偏移。
+7. **嚴格 JSON**：欄位用雙引號、無註解、無尾隨逗號；每個欄位在物件中只能出現一次（unique keys）。
+8. **中文用繁體**。
+
+# Lucide icon 提示
+
+新增項目的 icon 名請從 Lucide 圖示集挑選最相關的 slug，常用清單：
+- 數學 / 趨勢：trending-up, activity, line-chart, sigma
+- 神經網路：share-2, network, git-branch, brain
+- 系統 / 計算：cpu, server, database
+- 風機 / 能源：wind, zap, battery, sun
+- 控制 / 調整：sliders, settings, target, gauge
+- 安全 / 穩定：shield, lock, check-circle
+- 警告 / 風險：alert-triangle, alert-circle, flame
+- 流程 / 方向：arrow-right, chevron-right, play, rotate-cw
+- 程式 / 自動化：code, terminal, bot, workflow
+- 人物 / 群組：user, users
+
+# 直接輸出合併後的完整 JSON：

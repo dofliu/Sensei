@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Models / cache (large)
+models/
+.cache/
+*.bin
+*.safetensors
+*.gguf
+
+# Audio test data (commit deliberately into tests/)
+*.wav
+*.mp3
+*.m4a
+!tests/sample_audio/*.wav
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+sensei_logs/
+
+# Gradio temp
+flagged/
+gradio_cached_examples/
+
+# Sensei history (generated cards) — uncomment if you want them in the repo
+history/
+
+# Claude Code local config (per-developer)
+.claude/
+
+# Spec / preview files
+spec.tmp
+*.tmp
