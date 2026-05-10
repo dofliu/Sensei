@@ -13,17 +13,44 @@
 
 ---
 
+## Architecture at a glance
+
+```mermaid
+flowchart TB
+    A([🎤 Lecturer's voice &nbsp;·&nbsp; 📝 Text input &nbsp;·&nbsp; 📚 Card to extend])
+    A --> B
+
+    subgraph s1 ["━━━ Everything below runs on the teacher's laptop · No cloud · No bills ━━━"]
+        direction TB
+        B["**Whisper large-v3**<br/>ASR + INITIAL_PROMPT glossary<br/>~3 GB VRAM"]
+        C["**Gemma 4 e2b** via Ollama<br/>native tool calling → JSON-mode fallback<br/>~7 GB VRAM"]
+        D["**Pydantic** schema validation<br/>+ lenient salvage<br/>+ optional 8-language translation"]
+        B --> C --> D
+    end
+
+    D --> E["**6 visualization templates**<br/>enumeration · comparison · flow<br/>hierarchy · SWOT · pyramid"]
+    E --> F["💻 **Operator console**<br/>laptop browser · bilingual UI<br/>F8 hotkey · history · extend · summarize"]
+    E --> G["🎬 **/display** fullscreen view<br/>projector · paper editorial<br/>auto fade-swap"]
+
+    classDef input fill:#f6f1e6,stroke:#D97757,stroke-width:2px,color:#29261b
+    classDef process fill:#fffdf6,stroke:#1F3A6E,stroke-width:1.5px,color:#29261b
+    classDef render fill:#fffdf6,stroke:#4A7C59,stroke-width:1.5px,color:#29261b
+    classDef output fill:#fffdf6,stroke:#7D2E6E,stroke-width:2px,color:#29261b
+    class A input
+    class B,C,D process
+    class E render
+    class F,G output
+```
+
+Three layers of structured-output guarantee, top to bottom: native function calling → JSON mode → Pydantic with salvage. See [WRITEUP §3](WRITEUP.md#3-architecture) for the full reasoning.
+
+---
+
 ## Screenshots
 
-| Projector view (`/display`) — paper editorial | Operator console |
-|---|---|
-| ![Projector view — flow diagram on paper theme](docs/screenshots/display-flow-paper.png) | ![Operator console with bilingual UI](docs/screenshots/operator-console.png) |
-
-| Live recording mode | Card extension flow |
-|---|---|
-| ![Live mic with F8 hotkey](docs/screenshots/live-recording.png) | ![Extending an existing card with new items](docs/screenshots/extend-card.png) |
-
-> Want to see it move? The 3-minute demo video lives at *(uploaded after Day 7 classroom shoot)*.
+> 4 stills from the running app are captured during the **Day 7 classroom shoot** (2026-05-15) and dropped into [`docs/screenshots/`](docs/screenshots/). Until then, the demo video below is the canonical visual reference.
+>
+> The **3-minute demo video** is uploaded after the Day 7 shoot — link will appear here and on the [Kaggle submission page](https://www.kaggle.com/competitions/gemma-4-good-hackathon/).
 
 ---
 
