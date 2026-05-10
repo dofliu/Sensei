@@ -1,8 +1,29 @@
 # 🎙️ Sensei
 
+[![Hackathon](https://img.shields.io/badge/Gemma_4_Good-Hackathon_2026-D97757?style=flat-square)](https://www.kaggle.com/competitions/gemma-4-good-hackathon/)
+[![License: CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-1F3A6E?style=flat-square)](https://creativecommons.org/licenses/by/4.0/)
+[![Python](https://img.shields.io/badge/Python-3.12-4A7C59?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
+[![Gemma 4](https://img.shields.io/badge/Gemma_4-e2b-7D2E6E?style=flat-square)](https://www.kaggle.com/models/google/gemma-4)
+[![Ollama](https://img.shields.io/badge/Ollama-local_inference-C2741B?style=flat-square)](https://ollama.com)
+[![Whisper](https://img.shields.io/badge/Whisper-large--v3-1F3A6E?style=flat-square)](https://github.com/openai/whisper)
+
 > **An on-device AI co-teacher that turns a lecturer's spoken words into structured visual cards in real time. No cloud. No privacy risk. Runs on a single laptop.**
 
 *Submission for the [Gemma 4 Good Hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon/) · self-nominated for **Main Track** + **Future of Education** Impact Prize + **Ollama** Special Technology Prize · May 18, 2026*
+
+---
+
+## Screenshots
+
+| Projector view (`/display`) — paper editorial | Operator console |
+|---|---|
+| ![Projector view — flow diagram on paper theme](docs/screenshots/display-flow-paper.png) | ![Operator console with bilingual UI](docs/screenshots/operator-console.png) |
+
+| Live recording mode | Card extension flow |
+|---|---|
+| ![Live mic with F8 hotkey](docs/screenshots/live-recording.png) | ![Extending an existing card with new items](docs/screenshots/extend-card.png) |
+
+> Want to see it move? The 3-minute demo video lives at *(uploaded after Day 7 classroom shoot)*.
 
 ---
 
