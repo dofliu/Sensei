@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/screenshots/sensei-hero.png" alt="Sensei in action — a lecturer speaks; an on-device laptop running Whisper + Gemma 4 e2b transcribes and structures her words; six visualization templates appear on the projector behind her" width="100%">
+</p>
+
 # 🎙️ Sensei
 
 [![Hackathon](https://img.shields.io/badge/Gemma_4_Good-Hackathon_2026-D97757?style=flat-square)](https://www.kaggle.com/competitions/gemma-4-good-hackathon/)
