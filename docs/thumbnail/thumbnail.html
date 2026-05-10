@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sensei · Kaggle thumbnail (560×280, drawn at 1120×560 for HiDPI)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #1c1a13;
+    font-family: 'Geist', sans-serif;
+  }
+  /* Drawn 2x: 1120 × 560 px stage. Browser-screenshot the stage at this size,
+     Kaggle resizes to 560 × 280 → result is HiDPI-crisp on retina screens. */
+  .stage {
+    width: 1120px; height: 560px;
+    background:
+      radial-gradient(rgba(58,42,20,0.04) 1px, transparent 1px),
+      radial-gradient(rgba(58,42,20,0.025) 1px, transparent 1px),
+      linear-gradient(135deg, #f6f1e6 0%, #efe7d3 100%);
+    background-size: 6px 6px, 9px 9px, 100% 100%;
+    background-position: 0 0, 3px 3px, 0 0;
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 56px 64px;
+    color: #29261b;
+  }
+  .meta-top {
+    position: absolute; top: 28px; left: 64px; right: 64px;
+    display: flex; justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px; letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #7a6a52;
+  }
+  .meta-bottom {
+    position: absolute; bottom: 28px; left: 64px; right: 64px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #7a6a52;
+  }
+  .meta-bottom .dot { color: #4A7C59; font-size: 16px; vertical-align: middle; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 56px;
+    height: 100%;
+    align-items: center;
+    margin-top: 24px;
+  }
+
+  .left h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 110px;
+    font-weight: 600;
+    font-style: italic;
+    line-height: 0.95;
+    letter-spacing: -0.025em;
+    color: #29261b;
+    margin: 0 0 16px 0;
+  }
+  .left .tagline {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 400;
+    font-style: italic;
+    color: #5c4d36;
+    margin-bottom: 22px;
+    line-height: 1.25;
+  }
+  .left .pitch {
+    font-family: 'Geist', sans-serif;
+    font-size: 18px;
+    color: #5c4d36;
+    line-height: 1.5;
+    max-width: 460px;
+  }
+  .left .pitch strong { color: #29261b; font-weight: 600; }
+
+  .card {
+    background: #fffdf6;
+    border: 1px solid #d8cdb3;
+    border-top: 4px solid #D97757;
+    border-radius: 14px;
+    padding: 28px 32px;
+    box-shadow:
+      0 1px 2px rgba(15,13,10,0.05),
+      0 6px 16px rgba(15,13,10,0.06);
+  }
+  .card .card-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    font-weight: 500;
+    color: #29261b;
+    line-height: 1.1;
+    letter-spacing: -0.012em;
+    margin-bottom: 18px;
+  }
+  .card .steps {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .step {
+    display: flex; align-items: baseline; gap: 12px;
+    font-family: 'Geist', sans-serif;
+    font-size: 17px;
+  }
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #7a6a52;
+    min-width: 64px;
+  }
+  .step-num .bullet { font-size: 13px; vertical-align: -1px; }
+  .step .name {
+    color: #29261b; font-weight: 600; min-width: 100px;
+  }
+  .step .desc {
+    color: #7a6a52;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="meta-top">
+    <span>SENSEI · KAGGLE THUMBNAIL</span>
+    <span>Gemma 4 Good Hackathon · 2026</span>
+  </div>
+
+  <div class="grid">
+    <div class="left">
+      <h1>Sensei</h1>
+      <div class="tagline">An on-device AI co-teacher.</div>
+      <div class="pitch">
+        Listens to a lecturer's voice. Renders structured visual cards on the projector
+        in real time. <strong>No cloud. No fees. Runs on a single laptop.</strong>
+      </div>
+    </div>
+    <div class="right">
+      <div class="card">
+        <div class="card-title">Wind-Turbine<br>Condition Monitoring</div>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num"><span class="bullet" style="color:#D97757">●</span> STEP 01</div>
+            <div class="name">Measure</div>
+            <div class="desc">vibration + RPM</div>
+          </div>
+          <div class="step">
+            <div class="step-num"><span class="bullet" style="color:#1F3A6E">●</span> STEP 02</div>
+            <div class="name">Extract</div>
+            <div class="desc">FFT / kurtosis</div>
+          </div>
+          <div class="step">
+            <div class="step-num"><span class="bullet" style="color:#4A7C59">●</span> STEP 03</div>
+            <div class="name">Classify</div>
+            <div class="desc">bearing / blade</div>
+          </div>
+          <div class="step">
+            <div class="step-num"><span class="bullet" style="color:#C2741B">●</span> STEP 04</div>
+            <div class="name">Alert</div>
+            <div class="desc">notify operator</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="meta-bottom">
+    <span><span class="dot">●</span>&nbsp; ON-DEVICE · GEMMA 4 + WHISPER + OLLAMA</span>
+    <span>github.com/dofliu/sensei</span>
+  </div>
+</div>
+</body>
+</html>
