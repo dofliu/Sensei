@@ -512,6 +512,81 @@ def render_pyramid(d: dict) -> str:
     )
 
 
+def render_quiz_card(d: dict) -> str:
+    """
+    Paper-editorial quiz card for projection.
+
+    Design intent: the answer is intentionally NOT rendered on screen — students
+    sitting near the projector would spoiler themselves before the teacher gets
+    to lead the reveal. The teacher reads the correct answer + rationale from
+    the operator UI (JSON tab on their laptop) and announces it verbally. The
+    `answer` / `explanation` fields remain in the data for future reveal-toggle.
+
+    For the same reason, all four option cards are styled identically — no
+    visual highlight on the correct one.
+    """
+    t = _theme()
+    accents = t["accents"]
+    fg_strong = t["fg_strong"]
+    fg_muted = t["fg_muted"]
+    card_bg = t["card_bg"]
+    card_border = t["card_border"]
+
+    options = d.get("options", []) or []
+    # Defensive padding so a partial LLM output still renders something coherent
+    while len(options) < 4:
+        options.append("—")
+    labels = ["A", "B", "C", "D"]
+
+    mono_label_style = (
+        f"font-family:{FONT_MONO};font-size:15px;font-weight:500;"
+        f"letter-spacing:0.18em;text-transform:uppercase;color:{fg_muted};"
+    )
+
+    difficulty = (d.get("difficulty") or "medium").lower()
+    diff_label = {"easy": "EASY", "medium": "MEDIUM", "hard": "HARD"}.get(difficulty, "MEDIUM")
+    badge_html = (
+        f"<div style='{mono_label_style}margin-bottom:20px;'>"
+        f"<span style='color:{accents[0]};font-size:16px;'>●</span>&nbsp; "
+        f"QUIZ · {diff_label}</div>"
+    )
+
+    option_cards = []
+    for i, opt in enumerate(options[:4]):
+        c = accents[i % len(accents)]
+        option_cards.append(
+            f"<div style='background:{card_bg};border:1px solid {card_border};"
+            f"border-radius:14px;padding:32px 36px;display:flex;align-items:center;gap:28px;"
+            f"box-shadow:0 1px 2px rgba(15,13,10,0.05),0 2px 6px rgba(15,13,10,0.04);'>"
+            f"<div style='font-family:{FONT_SERIF_ITALIC};font-size:72px;font-weight:500;"
+            f"font-style:italic;color:{c};line-height:1;min-width:64px;text-align:center;'>"
+            f"{labels[i]}</div>"
+            f"<div style='font-family:{FONT_BODY};font-size:38px;color:{fg_strong};"
+            f"line-height:1.3;font-weight:500;'>{opt}</div>"
+            f"</div>"
+        )
+
+    title_html = ""
+    if d.get("title"):
+        title_html = (
+            f"<div style='font-family:{FONT_SERIF};font-size:44px;font-weight:500;"
+            f"color:{fg_muted};margin-bottom:22px;line-height:1.15;"
+            f"letter-spacing:-0.015em;font-style:italic;'>{d['title']}</div>"
+        )
+
+    return (
+        f"<div style='{_container_style()}'>"
+        f"{badge_html}"
+        f"{title_html}"
+        f"<div style='font-family:{FONT_SERIF};font-size:60px;font-weight:500;"
+        f"color:{fg_strong};margin-bottom:40px;line-height:1.25;letter-spacing:-0.01em;'>"
+        f"{d.get('question','')}</div>"
+        f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:22px;'>"
+        f"{''.join(option_cards)}</div>"
+        f"</div>"
+    )
+
+
 RENDERERS = {
     "enumeration_cards": render_enumeration_cards,
     "comparison_table":  render_comparison_table,
@@ -519,6 +594,7 @@ RENDERERS = {
     "hierarchy_tree":    render_hierarchy_tree,
     "swot":              render_swot,
     "pyramid":           render_pyramid,
+    "quiz_card":         render_quiz_card,
 }
 
 
@@ -643,6 +719,7 @@ UI_TEXTS = {
         "tpl_hier":           "🌳 階層樹（分類）",
         "tpl_swot":           "🎯 SWOT 分析（優劣機威）",
         "tpl_pyramid":        "🔺 金字塔（線性層級）",
+        "tpl_quiz":           "📝 隨堂測驗（4 選 1）",
         # Extend source sentinel
         "extend_latest":      "📌 最近一張",
         # Error messages (returned by handlers when inputs are bad)
@@ -728,6 +805,7 @@ UI_TEXTS = {
         "tpl_hier":           "🌳 Hierarchy tree (sub-classes)",
         "tpl_swot":           "🎯 SWOT analysis",
         "tpl_pyramid":        "🔺 Pyramid (linear layers)",
+        "tpl_quiz":           "📝 Quick quiz (4-option MCQ)",
         # Extend source sentinel
         "extend_latest":      "📌 Most recent card",
         # Error messages
@@ -825,6 +903,7 @@ def _list_template_hints() -> list:
         (T("tpl_hier"),    "hierarchy_tree"),
         (T("tpl_swot"),    "swot"),
         (T("tpl_pyramid"), "pyramid"),
+        (T("tpl_quiz"),    "quiz_card"),
     ]
 
 
