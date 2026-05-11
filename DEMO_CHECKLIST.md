@@ -4,7 +4,9 @@
 
 ## ❗ 拍攝前 24 小時必確認
 
-- [ ] Sensei 重啟一次後完整跑通 6 種模板的範例（enumeration / comparison / flow / hierarchy / SWOT / pyramid）
+- [ ] **先跑自動 preflight**：`cd D:\Project_CodingSimulation\PersonalHelper\sensei` → `.\dry_run.ps1`。9 條檢查（env vars / Whisper cache / Ollama / Python deps / 音訊裝置 / LLM 分類 / quiz 語音觸發 …）全綠才往下走。出現 FAIL 一律先修；列出來的 hint 行通常就是修法。約 35 秒。
+- [ ] Sensei 重啟一次後完整跑通 7 種模板的範例（enumeration / comparison / flow / hierarchy / SWOT / pyramid / quiz_card）
+- [ ] 對著麥克風講「來考一題，下列哪個是…」確認 quiz_card 語音觸發在實際 ASR + pipeline 下會生效（substring 命中印 `[Pipeline] quiz trigger phrase detected`）
 - [ ] `/display` F11 全螢幕在外接螢幕上正常顯示、卡片淡入動畫流暢
 - [ ] F8 / Ctrl+Space 都能觸發錄音
 - [ ] 主題切換 dark / light / paper 都正常

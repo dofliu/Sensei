@@ -58,6 +58,7 @@ TOOL_DESCRIPTIONS = {
     "hierarchy_tree":    "當老師描述「分類有子分類」（一層樹狀）時呼叫（例：「線性控制分為 P、PI、PID」）。",
     "swot":              "當老師明確談優勢、劣勢、機會、威脅四面向（或其中至少三面向）時呼叫。",
     "pyramid":           "當老師描述線性層級（從基礎到頂層的單軸結構）時呼叫，例如 Maslow 需求層次。",
+    "quiz_card":         "當老師想做隨堂測驗 / 形成性檢核 / 4 選 1 選擇題時呼叫（例：「來考一題」、「快問快答」、「下列哪個是…」、明確口述一個帶選項的問句）。",
 }
 
 SYSTEM_TOOLS_PROMPT = (
@@ -70,7 +71,10 @@ SYSTEM_TOOLS_PROMPT = (
     "5. 工具參數中每個欄位只能出現一次。\n"
     "6. icon 欄位用 Lucide slug；常用：trending-up, brain, wind, zap, "
     "settings, sliders, target, gauge, shield, alert-triangle, arrow-right, "
-    "code, bot, users, graduation-cap, lightbulb, book-open, circle。"
+    "code, bot, users, graduation-cap, lightbulb, book-open, circle。\n"
+    "7. quiz_card 工具：`options` 必須恰好 4 個元素，順序對應 A、B、C、D；"
+    "**選項文字裡不可再加「A.」「(A)」「A:」「A、」等前綴**，"
+    "渲染器會自動加上字母。`answer` 只能是單一大寫字母 \"A\"、\"B\"、\"C\" 或 \"D\"。"
 )
 
 

@@ -20,7 +20,7 @@ Sensei is an on-device AI co-teacher. It listens to a lecturer's spoken words, c
 
 The teacher operates Sensei from a Gradio control panel on the laptop, while the projector mirrors a separate read-only view (`/display`) that fades in each new card automatically. When a student raises a follow-up — *"oh, also robust control and gain scheduling"* — the teacher clicks **Extend last card** and the existing card grows by two items, in place, with the original four items untouched.
 
-Six curated visualization templates cover the most common pedagogical speech patterns:
+Seven curated visualization templates cover the most common pedagogical speech patterns:
 
 - `enumeration_cards` — listing parallel concepts
 - `comparison_table` — A vs B
@@ -28,8 +28,11 @@ Six curated visualization templates cover the most common pedagogical speech pat
 - `hierarchy_tree` — classifying with sub-classes
 - `swot` — 2×2 strategic grid (strengths / weaknesses / opportunities / threats)
 - `pyramid` — linear hierarchy from apex (narrow) to base (wide)
+- `quiz_card` — in-lecture formative check (4-option multiple choice), with the correct answer kept off the projection so the teacher controls reveal pacing
 
 The set is curated, not free-form — letting the model invent layouts mid-lecture would make the classroom screen jumpy and unreadable. Each template is also exposed as a Gemma 4 tool, so template selection becomes tool selection (see §3).
+
+`quiz_card` carries one extra mechanism: a **spoken-trigger guard** in `core/pipeline.py`. When the transcript contains a wake-phrase like *"來考一題"*, *"考考大家"*, or *"quick check"*, Sensei forces the `quiz_card` template before the LLM classifies — turning what would be a model-reliability lottery into a deterministic "teacher says it → quiz appears" flow. The operator's explicit template choice always wins; the guard only fires in Auto mode. The teacher never has to leave their natural speech pattern to invoke a quiz.
 
 ## 3. Architecture
 
@@ -45,7 +48,7 @@ The set is curated, not free-form — letting the model invent layouts mid-lectu
     └─ format="json" mode (fallback path)       ← when tool-args validation fails
     │
     ▼ raw arguments / JSON
-[ Pydantic schema validation ]                 ← 6 schemas, graceful degradation on failure
+[ Pydantic schema validation ]                 ← 7 schemas, graceful degradation on failure
     │
     ▼ validated dict
 [ HTML renderers + 24/36-px large-print ]
@@ -56,7 +59,7 @@ The set is curated, not free-form — letting the model invent layouts mid-lectu
 
 Three layers of structured-output guarantee, each catching what the previous one misses:
 
-1. **Native function calling (primary path)** — Each visualization template is registered as a Gemma 4 tool via Ollama's `tools=` parameter, with the JSON Schema auto-derived from the Pydantic model. Template selection becomes tool selection: the model picks exactly one tool and fills its arguments. Six tools, one call per utterance.
+1. **Native function calling (primary path)** — Each visualization template is registered as a Gemma 4 tool via Ollama's `tools=` parameter, with the JSON Schema auto-derived from the Pydantic model. Template selection becomes tool selection: the model picks exactly one tool and fills its arguments. Seven tools, one call per utterance. For one specific template (`quiz_card`), a deterministic Mandarin/English wake-phrase check in the pipeline can short-circuit classification entirely — useful when the in-class flow must be guaranteed (the teacher is explicitly initiating a formative check).
 2. **JSON-mode fallback** — `gemma4:e2b` is a 2-B-parameter model; on complex nested structures (lists of items each with three required fields), it occasionally drops a required field when filling tool arguments. When that happens, Sensei silently retries through Ollama's `format="json"` parameter, which constrains output at the sampling level — invalid JSON is unproducible. This second path uses the original prompt-driven classifier and recovers cleanly in practice.
 3. **Pydantic schema validation** — Either path's output runs through Pydantic. On schema violation, Sensei degrades to a `{"template": "raw"}` fallback rather than crashing the demo. This is what keeps the classroom screen calm even on adversarial input.
 
@@ -123,7 +126,8 @@ The named beneficiary is concrete: **the under-resourced classroom teacher** in 
 What ships by Day 10:
 
 - Live microphone with toggle hotkey (F8 + Ctrl+Space; presenter-pen friendly)
-- Two additional visualization templates landed: SWOT (2×2) and linear pyramid (fishbone deferred — CSS cost vs demo benefit didn't pencil out)
+- Three additional visualization templates landed beyond the original four: SWOT (2×2), linear pyramid, and `quiz_card` (in-lecture formative check with spoken-trigger guard). Fishbone deferred — CSS cost vs demo benefit didn't pencil out
+- **Spoken-trigger guard for `quiz_card`** — Mandarin/English wake phrases ("來考一題", "quick check", …) deterministically force a quiz card, removing classifier-reliability risk from the in-class demo flow. Operator's explicit template choice always wins
 - Theme switching for different classroom lighting (dark / light / paper); paper editorial type pairing (Playfair Display + Geist + JetBrains Mono)
 - **Native Gemma 4 function-calling** as the primary template-selection path, with JSON-mode as a silent fallback when small-model tool-arg filling drops fields. Template tools are auto-derived from Pydantic schemas — no hand-written tool spec
 - **Multilingual projection** — the projector view re-renders in any of 8 languages on demand, all via the same on-device Gemma 4

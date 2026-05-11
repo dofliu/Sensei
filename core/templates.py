@@ -126,6 +126,24 @@ class Pyramid(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# 7. Quiz card: in-lecture formative-check multiple choice (4-option)
+#    "Quick check — which of the following is NOT a control method?
+#     (A) PID  (B) Fuzzy  (C) Linear regression  (D) Robust"
+#    Designed for the demo flow where the teacher asks the question,
+#    students answer by hand-raise, and the teacher reveals the key verbally.
+# ──────────────────────────────────────────────
+class QuizCard(BaseModel):
+    template: Literal["quiz_card"] = "quiz_card"
+    title: str = Field(description="Short topic label for the projector (≤16 chars ideal)")
+    question: str = Field(description="Question stem in Traditional Chinese (≤60 chars ideal)")
+    # Exactly 4 options; renderer auto-labels them A/B/C/D in order.
+    options: list[str] = Field(min_length=4, max_length=4)
+    answer: Literal["A", "B", "C", "D"] = Field(description="The single correct option label")
+    explanation: str = Field(default="", description="Short rationale (≤40 chars), shown small for teacher-led reveal")
+    difficulty: Literal["easy", "medium", "hard"] = Field(default="medium")
+
+
+# ──────────────────────────────────────────────
 # Registry — used by llm.py for schema validation
 # ──────────────────────────────────────────────
 TEMPLATE_REGISTRY: dict[str, type[BaseModel]] = {
@@ -135,4 +153,5 @@ TEMPLATE_REGISTRY: dict[str, type[BaseModel]] = {
     "hierarchy_tree":    HierarchyTree,
     "swot":              SWOT,
     "pyramid":           Pyramid,
+    "quiz_card":         QuizCard,
 }

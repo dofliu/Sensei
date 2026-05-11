@@ -14,23 +14,23 @@ The **single most important deliverable is a 3-minute demo video** of a real cla
 
 ---
 
-## 1. Current status (as of 2026-05-09 evening)
+## 1. Current status (as of 2026-05-11 evening)
 
 ### Working ✅
 - `core/asr.py` — Faster-Whisper large-v3 loads + transcribes
 - `core/llm.py` — Gemma 4 e2b via Ollama, JSON-mode output, Pydantic validation
-- `core/templates.py` — 4 schemas validated
-- `core/pipeline.py` — end-to-end glue
+- `core/templates.py` — 7 schemas validated (enumeration / comparison / flow / hierarchy / SWOT / pyramid / quiz_card)
+- `core/pipeline.py` — end-to-end glue, plus spoken-trigger override (`QUIZ_TRIGGER_PHRASES`) that hard-forces `quiz_card` when teacher says "來考一題" / "quick check" / etc.
+- Live mic mode — F8 / red button records, stops, transcribes, generates card, pushes to /display. Confirmed working by user 2026-05-11.
 - Smoke test passed: `python -m core.llm "..."` returns valid JSON for the canonical example ("控制不是只有 PID...")
 
 ### Just-fixed (verify still working) 🔧
 - `frontend/app.py` — had Gradio 6.0 API issues (`theme` moved to `launch()`, `show_api` removed). Should be patched. Run `python -m frontend.app` and confirm Gradio launches at http://localhost:7860.
 
 ### Not yet started ⏳
-- Live mic streaming (rolling 30-sec buffer, hotkey trigger) — Day 3 priority
 - Theme switching (light / paper themes; current is dark only) — approved 2026-05-09
-- ~~SWOT / pyramid templates~~ — shipped 2026-05-09; ~~fishbone~~ dropped 2026-05-09 (CSS cost too high for low impact)
-- Native Gemma 4 function-calling refactor (currently using prompt + JSON mode) — Day 5
+- ~~SWOT / pyramid templates~~ — shipped 2026-05-09; ~~quiz_card~~ — shipped 2026-05-11 (with spoken-trigger guard); ~~fishbone~~ dropped 2026-05-09 (CSS cost too high for low impact)
+- Native Gemma 4 function-calling refactor — partially done: tools path is primary, JSON mode is silent fallback. Day 5 task = final cleanup.
 - Domain glossary expansion (currently only auto-control terms)
 - Real classroom audio testing pass — Day 4
 - Real classroom demo video — Day 7 (the deliverable)
@@ -176,8 +176,11 @@ sensei/
 | `hierarchy_tree` | "X is divided into Y and Z, Y has..." | `HierarchyTree` | shipped |
 | `swot` | strengths/weaknesses/opportunities/threats | `SWOT` | shipped 2026-05-09 |
 | `pyramid` | layered linear hierarchy from apex (narrow) to base (wide) | `Pyramid` | shipped 2026-05-09 |
+| `quiz_card` | in-lecture 4-option multiple-choice formative check | `QuizCard` | shipped 2026-05-11 |
 
 Why a curated set rather than free-form? LLM picking from a known list is far more reliable than LLM inventing layouts mid-lecture. **Each new template is a deliberate addition** requiring (1) Pydantic class, (2) registry entry, (3) prompt example, (4) renderer, (5) manual smoke test on representative phrases — landed one at a time, never in a batch. Beyond auto-classification, the operator UI also exposes a **template-hint dropdown** so the lecturer can force a specific template ("we're doing SWOT now"); LLM falls back to auto-pick if no hint is given.
+
+**Spoken triggers for quiz_card** — `core/pipeline.py::QUIZ_TRIGGER_PHRASES` substring-matches Mandarin / English wake phrases ("來考一題", "考考大家", "quick check", …). When detected in transcript AND the operator dropdown is on Auto, `template_hint="quiz_card"` is forced before the LLM call. This gives the demo a deterministic "teacher speaks naturally → quiz appears" flow without depending on the model's classification reliability. Operator's explicit dropdown choice always wins; the trigger only fires in Auto mode.
 
 ---
 
@@ -191,7 +194,7 @@ These are non-obvious choices made for specific reasons. Reverting them without 
 | **Default model `gemma4:e2b`, not `e4b`** | VRAM budget on RTX 4080 (12 GB): Whisper large-v3 ~3 GB + Gemma 4 e2b ~7 GB = ~10 GB headroom. e4b would force CPU spillover. | Don't change default to `e4b` unless user explicitly requests, AND we downgrade ASR to medium. |
 | **Faster-Whisper large-v3 for ASR** | Best Mandarin accuracy. Engineering jargon recognition critical (PID, SCADA, Modbus, etc.). Domain `initial_prompt` reduces term WER ~40-60%. | Don't downgrade to medium without user permission. |
 | **JSON-mode + Pydantic post-validation (two layers)** | Layer 1 (Ollama `format="json"`) prevents invalid JSON at sampling level. Layer 2 (Pydantic) catches schema violations and gracefully degrades to `{"template": "raw"}`. | Don't remove either layer. The graceful degradation is what keeps the demo from crashing on edge cases. |
-| **Curated template vocabulary, not free-form** | Stable visual identity; LLM picks from a known list. Currently 6 shipped (enumeration / comparison / flow / hierarchy / SWOT / pyramid), plus an operator hint dropdown to force a specific template. Fishbone was approved then dropped — CSS cost vs demo benefit didn't pencil out. See Section 2 for the table. | Don't let the LLM invent layouts. Each new template = Pydantic schema + registry + prompt example + renderer + smoke test, validated one at a time. |
+| **Curated template vocabulary, not free-form** | Stable visual identity; LLM picks from a known list. Currently 7 shipped (enumeration / comparison / flow / hierarchy / SWOT / pyramid / quiz_card), plus an operator hint dropdown to force a specific template. Fishbone was approved then dropped — CSS cost vs demo benefit didn't pencil out. See Section 2 for the table. | Don't let the LLM invent layouts. Each new template = Pydantic schema + registry + prompt example + renderer + smoke test, validated one at a time. |
 | **Card text ≥ 24 px, key headings ≥ 36 px** | Cards are projected onto classroom screens; students sit far. Anything <20 px is unreadable past row 4. The `/display` route is pure projector view — it has to read at distance. | Don't shrink fonts to "fit more text" on a card. If content overflows, split into two cards or trim wording. Renderers must respect these minimums. |
 | **Traditional Chinese as primary language** | User and target classrooms are Taiwanese. | Don't simplify to mainland Chinese. Glossary in `core/asr.py::ASRConfig.INITIAL_PROMPT` is in 繁中. |
 | **HF cache at `D:\hf-cache`** | User's C drive is full. | Don't change to `~/.cache/...` (which on Windows means `C:\Users\...`). |
@@ -251,31 +254,18 @@ python -m frontend.app
 
 ---
 
-## 6. Known issues + immediate fixes needed
+## 6. Known issues
 
 ### Issue #1: Gemma 4 e2b occasionally emits duplicate JSON keys
 - **Symptom**: same field appears twice in output (e.g., `"icon": "brain", "icon": "brain"`)
 - **Why**: `format="json"` enforces JSON validity but not key uniqueness
-- **Fix**: edit `prompts/classifier.txt`, add to "嚴格輸出規則": "每個欄位在物件中只能出現一次（unique keys）"
-- **Priority**: low (Python's `json.loads` accepts dup keys, takes the last; Pydantic accepts; doesn't crash)
+- **Workaround in place**: `prompts/classifier.txt` includes the rule "每個欄位在物件中只能出現一次（unique keys）". Python's `json.loads` accepts dup keys (takes the last value); Pydantic accepts; doesn't crash the demo either way.
+- **Priority**: low — leave as-is until / unless it causes a visible demo glitch.
 
-### Issue #2: Gradio 6 API breaking changes
-- **Status**: PATCHED in user's local copy via PowerShell sed
-- **What changed**:
-  1. `theme=` removed from `gr.Blocks(...)` constructor
-  2. `show_api=False` removed from `app.launch(...)` call
-- **Next time you start working**: confirm `frontend/app.py` lines around 236 and 273-277 don't have these. If they do, the patch didn't apply and Gradio will fail to start.
-
-### Issue #3: Lucide icons not real
-- **Symptom**: cards show 2-letter placeholders like "TR" (for trending-up) instead of actual icons
-- **Why**: I shipped a stub `_lucide_svg()` in `frontend/app.py`
-- **Fix**: replace stub with either (a) inline SVG paths from a Lucide icon dict, or (b) `<img src="https://unpkg.com/lucide-static@latest/icons/{name}.svg">` (CDN-based, simpler).
-- **Priority**: HIGH — biggest visual quality win for demo video
-
-### Issue #4: No second-screen / fullscreen mode
-- **Status**: not started
-- **Plan**: add a `/display` route in Gradio (or a separate FastAPI app) that shows ONLY the latest card fullscreen, no controls. The lecturer mirrors this to the projector.
-- **Priority**: HIGH — needed for the demo video setup
+### Resolved earlier (do not refile)
+- ~~Gradio 6 API breaking changes~~ — patched, app launches cleanly.
+- ~~Lucide icons stub~~ — `_lucide_svg()` uses lucide-static CDN via CSS mask (real icons, accent-tintable). See `frontend/app.py::_lucide_svg`.
+- ~~No second-screen view~~ — `/display` route is implemented via FastAPI mount with JS polling + fade transitions. See `frontend/app.py` §"Second-screen / projector view" (around line 1804).
 
 ---
 
@@ -283,34 +273,34 @@ python -m frontend.app
 
 ```
 Day 1  · 2026-05-09 (Sat)  ✅ Skeleton + Ollama backend + Gradio MVP launches
-Day 2  · 2026-05-10 (Sun)  ⏳ Real Lucide icons + 2nd-screen view + prompt fixes
-Day 3  · 2026-05-11 (Mon)  ⏳ Live mic mode (rolling buffer + hotkey)
-Day 4  · 2026-05-12 (Tue)  ⏳ Glossary tuning per course; iterate prompt for quality
-Day 5  · 2026-05-13 (Wed)  ⏳ Native Gemma 4 function-calling refactor
-Day 6  · 2026-05-14 (Thu)  ⏳ Buffer day / polish UI
+Day 2  · 2026-05-09 evening ✅ Real Lucide icons + 2nd-screen /display + prompt fixes
+Day 3  · 2026-05-09 cont.  ✅ Themes (dark/light/paper) + SWOT + pyramid + 8-lang translation
+Day 3  · 2026-05-11 (Mon)  ✅ Live mic mode (F8 hotkey + record/stop + push to /display)
+Day 3+ · 2026-05-11 evening ✅ quiz_card template + spoken-trigger wake phrases (added scope)
+Day 4  · 2026-05-11 done   ✅ Real classroom audio testing pass (multiple takes via live mic; ASR mishears are pronunciation-side, not Gemma 4-side; user-verified)
+Day 5  · 2026-05-13 (Wed)  ✅ Native Gemma 4 function-calling — already primary path; only doc/cleanup remains
+Day 6  · 2026-05-14 (Thu)  ⏳ Buffer / UI polish / DEMO_SCRIPT dry-run
 Day 7  · 2026-05-15 (Fri)  🎬 RECORD CLASSROOM DEMO VIDEO  ← critical day
-Day 8  · 2026-05-16 (Sat)  ⏳ Edit video + write technical writeup
-Day 9  · 2026-05-17 (Sun)  ⏳ Buffer / GitHub README polish / writeup final pass
+Day 8  · 2026-05-16 (Sat)  ⏳ Edit video + WRITEUP.md final pass
+Day 9  · 2026-05-17 (Sun)  ⏳ Buffer / README polish / writeup final pass
 Day 10 · 2026-05-18 (Mon)  📤 SUBMIT before 23:59 UTC
 ```
 
-**The whole project is optimized around Day 7's video shoot.** Every feature added between now and then must be evaluable as: "does this make the demo more impressive in 3 minutes?" If no, defer.
+**Net status as of 2026-05-11 evening**: every shippable feature is in. Day 4-6 is now mostly **rehearsal + content polish, not building**. The whole remaining timeline pivots on Day 7's video shoot.
 
 ---
 
-## 8. Immediate next tasks (Day 2 priority order)
+## 8. Immediate next tasks (final-stretch order)
 
-When the user says "let's keep going" or similar, this is the order to attack:
+The build is functionally complete. From here the queue is rehearsal + content, not features:
 
-1. **Real Lucide icons** in `frontend/app.py::_lucide_svg()`. Recommend CDN approach (`unpkg.com/lucide-static`) — 1 line of code change, instant visual improvement.
+1. **Dry-run the full DEMO_SCRIPT** on the actual rig (laptop + projector + external mic) on Day 6. Catch timing, F8 misses, theme/font issues with eyes-on-projector view. Pay special attention to the new Demo C (quiz spoken-trigger) — confirm "來考一題" survives the user's microphone setup before shoot day.
 
-2. **Fix prompt issue #1** (duplicate keys) in `prompts/classifier.txt`. Trivial.
+2. **Day 7 shoot per [DEMO_CHECKLIST.md](DEMO_CHECKLIST.md)**. The single highest-leverage day.
 
-3. **Add `/display` second-screen route**. Strip Gradio chrome, show only the card area, large fonts, fullscreen-friendly. Likely a simple `gr.Blocks` with just the HTML output, served on a different port or path.
+3. **WRITEUP.md final pass** post-shoot — likely just last-minute polish, template/feature lists are already current.
 
-4. **Test on real lecture audio**. User has access to recordings of his own lectures. Try a 30-second clip in the audio tab.
-
-5. **Live mic mode** — only after #1-4 are stable. Rolling 30-sec buffer + hotkey to "snapshot to card." Recommend keyboard library like `keyboard` (Windows) or `pynput`. Requires `sounddevice` for streaming capture.
+Resolved earlier (2026-05-11): Day 4 real-classroom audio testing pass, DEMO_SCRIPT quiz_card decision (Demo C swapped from flow → quiz).
 
 ---
 

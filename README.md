@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/sensei-hero.png" alt="Sensei in action — a lecturer speaks; an on-device laptop running Whisper + Gemma 4 e2b transcribes and structures her words; six visualization templates appear on the projector behind her" width="100%">
+  <img src="docs/screenshots/sensei-hero.png" alt="Sensei in action — a lecturer speaks; an on-device laptop running Whisper + Gemma 4 e2b transcribes and structures her words; seven visualization templates (including a live formative-check quiz) appear on the projector behind her" width="100%">
 </p>
 
 # 🎙️ Sensei
@@ -32,7 +32,7 @@ flowchart TB
         B --> C --> D
     end
 
-    D --> E["**6 visualization templates**<br/>enumeration · comparison · flow<br/>hierarchy · SWOT · pyramid"]
+    D --> E["**7 visualization templates**<br/>enumeration · comparison · flow<br/>hierarchy · SWOT · pyramid · quiz"]
     E --> F["💻 **Operator console**<br/>laptop browser · bilingual UI<br/>F8 hotkey · history · extend · summarize"]
     E --> G["🎬 **/display** fullscreen view<br/>projector · paper editorial<br/>auto fade-swap"]
 
@@ -86,7 +86,7 @@ Two simultaneous views:
   • /display fullscreen view (auto-updating)  ← classroom projector
 ```
 
-Four visualization templates cover ~80% of pedagogical speech (more landing soon — see below):
+Seven visualization templates cover the most common pedagogical speech patterns:
 
 | Template | When | Example trigger | Status |
 |---|---|---|---|
@@ -96,6 +96,9 @@ Four visualization templates cover ~80% of pedagogical speech (more landing soon
 | `hierarchy_tree` | Classifying with sub-classes | *"Linear control includes P, PI, PID..."* | shipped |
 | `swot` | SWOT analysis (2x2 strategic grid) | *"Let's SWOT this strategy..."* | shipped |
 | `pyramid` | Linear hierarchy from apex to base | *"Maslow's hierarchy: physiological at base..."* | shipped |
+| `quiz_card` | In-lecture formative check (4-option MCQ) | *"Quick check — which of these is NOT..."* | shipped |
+
+`quiz_card` has a **spoken trigger guard**: phrases like *"來考一題"*, *"考考大家"*, *"quick check"* hard-force the template before the LLM classifies, so the in-class flow is deterministic — the teacher speaks naturally and the quiz card appears.
 
 ### Beyond the basics
 
@@ -187,13 +190,15 @@ If quality priority: switch model to `gemma4:e4b` in `core/llm.py` AND ASR to me
 sensei/
 ├── core/
 │   ├── asr.py           ← Faster-Whisper wrapper, domain glossary
-│   ├── llm.py           ← Gemma 4 via Ollama, JSON-constrained
-│   ├── templates.py     ← 4 visualization schemas (Pydantic)
-│   └── pipeline.py      ← end-to-end glue
+│   ├── llm.py           ← Gemma 4 via Ollama, tool calling + JSON-mode fallback
+│   ├── templates.py     ← 7 visualization schemas (Pydantic)
+│   └── pipeline.py      ← end-to-end glue + quiz_card spoken-trigger guard
 ├── frontend/
-│   └── app.py           ← Gradio MVP UI + 4 HTML renderers
+│   ├── app.py           ← Gradio operator console + 7 HTML renderers + /display route
+│   └── ...
 ├── prompts/
-│   └── classifier.txt   ← Gemma 4's instruction (template choice + slot filling)
+│   ├── classifier.txt   ← Gemma 4's instruction (template choice + slot filling)
+│   └── extender.txt     ← prompt for "extend existing card with new content"
 ├── requirements.txt
 └── README.md            ← you are here
 ```
@@ -202,13 +207,14 @@ sensei/
 
 - [x] **Day 1 (5/9):** Core pipeline skeleton + Gradio MVP, Ollama backend
 - [x] **Day 2 (5/9 evening):** Real Lucide icons; second-screen `/display` view; history / extend / template-hint features; large-print rule (≥24 px / ≥36 px)
-- [ ] **Day 3 (5/11):** Live mic + hotkey (rolling 30-sec buffer, snapshot trigger)
-- [x] **Day 3 (5/9 cont):** Theme switching (dark / light / paper); SWOT and pyramid templates
-- [ ] **Day 4 (5/12):** Real classroom audio testing pass; expand domain glossary
-- [ ] **Day 5 (5/13):** Native Gemma 4 function-calling refactor (tool-use API)
-- [ ] **Day 6 (5/14):** UI polish; demo script + dry-run; equipment check
+- [x] **Day 3 (5/9 cont):** Theme switching (dark / light / paper); SWOT and pyramid templates; 8-language projection
+- [x] **Day 3 (5/11):** Live mic + F8 hotkey (record / stop / auto-transcribe → push to `/display`)
+- [x] **Day 3+ (5/11 evening):** `quiz_card` template + Mandarin/English spoken-trigger guard for deterministic in-class quiz flow
+- [x] **Day 5 (folded into Day 1–2):** Native Gemma 4 function-calling — already the primary path; JSON-mode kept as silent fallback
+- [x] **Day 4 (folded into 5/11):** Real classroom audio testing pass via live mic; multiple takes; remaining ASR misses are pronunciation-side, not Gemma 4-side
+- [ ] **Day 6 (5/14):** Full dry-run on the projector + external-mic rig per [DEMO_SCRIPT.md](DEMO_SCRIPT.md)
 - [ ] **Day 7 (5/15):** **Real classroom shoot for demo video** — the critical day
-- [ ] **Day 8 (5/16):** Edit demo video; finalize `WRITEUP.md`
+- [ ] **Day 8 (5/16):** Edit demo video; finalize [WRITEUP.md](WRITEUP.md)
 - [ ] **Day 9 (5/17):** Buffer / README polish / writeup final pass
 - [ ] **Day 10 (5/18):** Submit by 23:59 UTC
 

@@ -113,18 +113,49 @@ The structure is in the teacher's head, not on the screen.
 >
 > *The card grows in place. Original 5 stay, 2 new ones added.*
 
-### Demo C — Flow diagram（1:45–2:15，30 秒）
+### Demo C — Quiz · 即時形成性評量（1:45–2:15，30 秒） · Future-of-Education 招牌
 
-**[軌 A 1:45–1:55]** — 老師轉換主題：
+> 此段是這支影片對 Impact Track（Future of Education）最強的訊號。重點不是「AI 出了一題」，而是「**老師完全自然講話，AI 自己懂這是要考試**」——spoken-trigger guard 把不確定的模型分類變成確定的關鍵字觸發。
 
-> 「以風機監控系統來看，整個流程是這樣 — 我們先量測振動、再做特徵抽取、接著分類診斷、最後產生告警。」
+**[軌 A 1:45–1:55]** — 老師面對學生，承接 Demo B 剛剛延伸完的 7 張控制方法卡片：
 
-按 F8 開始 → 講完 → 按 F8 結束。
+> 「OK，講了這麼多控制方法。**來考一題** — 下列哪一個不是回授控制器？PID、模糊、線性回歸、強健。」
 
-**[軌 B 1:55–2:15]** — 切到 `/display`：流程圖卡片淡入，4 步驟橫向排列、有大箭頭（paper editorial 風格）。停留約 18 秒。
+老師按 F8 開始 → 講完 → 按 F8 結束。**鏡頭重點**：「**來考一題**」這四個字是 spoken-trigger 觸發詞，剪接時這四個字下面浮一行小字幕：
 
-**字幕**：
-> "Wind turbine monitoring: measure → extract → classify → alert."
+```
+🎯 wake phrase detected: "來考一題" → template_hint=quiz_card
+```
+
+**[軌 C 1:55–2:00]** — 切操作介面螢幕錄影：log 區顯示這一行印出來的瞬間：
+
+```
+[Pipeline] quiz trigger phrase detected → forcing template_hint=quiz_card
+[Sensei LLM] path=tools template=quiz_card
+```
+
+這 5 秒鏡頭等於用「終端機證據」對評審證明：這不是模型猜的，是系統設計的保證機制。
+
+**[軌 B 2:00–2:10]** — 切到 `/display`：quiz_card 淡入。題幹 60 px serif、2×2 選項格、A/B/C/D 義式斜體大寫字母。**最關鍵的視覺重點：四個選項視覺完全一致，正解 C 沒有任何高亮**——學生從遠處看不出哪個是對的，老師掌握揭曉節奏。
+
+**[軌 A 2:10–2:15]** — 切回老師臉部，指著螢幕問：
+
+> 「答 **C** 線性回歸的舉手?」
+
+幾位學生舉手。老師點頭：
+
+> 「對，線性回歸是統計模型，不是回授控制器。」
+
+**字幕（英文，1:45 持續到 2:15）**：
+> "Quick check — which of these is NOT a feedback controller? PID / Fuzzy / Linear regression / Robust."
+>
+> *Sensei detects the spoken wake phrase, forces the quiz template, and intentionally keeps the answer off the projection — the teacher leads the reveal.*
+
+**為什麼這段這樣設計（給後製剪接者看的剪片邏輯）**：
+- A 軌（老師臉）開頭起 10 秒 — 觀眾要先看到「人」說話，建立「這不是 AI 自動跑」的人類感
+- C 軌（terminal log）中段 5 秒 — 給技術評審的證據鏡頭，證明 spoken-trigger 是 deterministic 機制
+- B 軌（/display 卡片）核心 10 秒 — 給故事評審看到結果
+- A 軌（學生舉手）收尾 5 秒 — 給 Impact Track 評審看到「人受惠」的具體畫面
 
 ---
 
@@ -232,4 +263,4 @@ Try it. Share it. Teach with it.
 | 投影機畫面相機看起來糊 | 那段就純用螢幕錄影、不用相機；老師臉的鏡頭單獨補拍 |
 | F8 在拍攝時無反應 | 改用紅色大按鈕，剪接時把鍵盤鏡頭換成滑鼠鏡頭 |
 | Sensei 卡住 / 出錯 | 留 history JSON，重啟後從上次斷點繼續；剪接時跳過當機段 |
-| 時間真的拍不完 | 砍 Demo C（flow diagram）— 留 A + B 兩段就夠講完整故事 |
+| 時間真的拍不完 | **首選**：壓縮 §4 voiceover（30 s → 20 s，文字 overlay 仍保留全部）。**次選**：砍 Demo C（quiz）— 留 A + B 兩段仍是完整故事，§4 voiceover 補一句「Sensei also supports live quizzes triggered by natural speech」帶過。**不要砍 B**（extend 是 killer feature）。 |
