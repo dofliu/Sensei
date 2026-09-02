@@ -209,6 +209,12 @@ def _save_to_history(
     if is_summary:
         payload["is_summary"] = True
     json_path = HISTORY_DIR / f"{base}.json"
+    n = 1
+    while json_path.exists():
+        # Two cards within the same second must not overwrite each other.
+        n += 1
+        json_path = HISTORY_DIR / f"{base}_{n}.json"
+    base = json_path.stem
     json_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -831,11 +837,10 @@ if (!window.__senseiHotkeyBound) {
 """
 
 
-with gr.Blocks(
-    title="Sensei · On-device AI Co-Teacher",
-    theme=SENSEI_THEME,
-    css=SENSEI_CSS,
-) as app:
+with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
+    # theme / css are passed to gr.mount_gradio_app in __main__ (Gradio 6 moved
+    # them off the Blocks constructor). SENSEI_CSS is additionally injected via
+    # the overlay HTML block so it survives any launch path.
     # Gradio 6 injection point — js_on_load runs once when this HTML mounts.
     # The HTML body carries the help-overlay markup (hidden by default); the JS
     # binds F8 / Ctrl+Space / ? / Esc on the document level.
@@ -1022,7 +1027,9 @@ with gr.Blocks(
 
 
 if __name__ == "__main__":
-    fastapi_app = build_fastapi_app(app, HISTORY_DIR, _lang)
+    fastapi_app = build_fastapi_app(
+        app, HISTORY_DIR, _lang, theme=SENSEI_THEME, css=SENSEI_CSS,
+    )
     print()
     print("=" * 60)
     print(" Sensei serving on http://localhost:7860")
