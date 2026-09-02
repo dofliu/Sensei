@@ -13,7 +13,7 @@
 
 > **An on-device AI co-teacher that turns a lecturer's spoken words into structured visual cards in real time. No cloud. No privacy risk. Runs on a single laptop.**
 
-*Submission for the [Gemma 4 Good Hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon/) · self-nominated for **Main Track** + **Future of Education** Impact Prize + **Ollama** Special Technology Prize · May 18, 2026*
+*Built for the [Gemma 4 Good Hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon/) (May 2026, see [Hackathon history](#hackathon-history)) · now developed for real weekly classroom use · roadmap in [PROJECT_ENHANCEMENT_PROPOSAL.md](PROJECT_ENHANCEMENT_PROPOSAL.md)*
 
 ---
 
@@ -50,14 +50,6 @@ Three layers of structured-output guarantee, top to bottom: native function call
 
 ---
 
-## Screenshots
-
-> 4 stills from the running app are captured during the **Day 7 classroom shoot** (2026-05-15) and dropped into [`docs/screenshots/`](docs/screenshots/). Until then, the demo video below is the canonical visual reference.
->
-> The **3-minute demo video** is uploaded after the Day 7 shoot — link will appear here and on the [Kaggle submission page](https://www.kaggle.com/competitions/gemma-4-good-hackathon/).
-
----
-
 ## The problem
 
 Every classroom has the same gap: the teacher *says* rich, structured ideas — *"control isn't only PID; there's also optimal, neural, nonlinear, robust control"* — but what the students *see* is a static slide that took the teacher hours to make, or a whiteboard scribble. The structure is in the teacher's head, not on the screen.
@@ -83,7 +75,7 @@ Pydantic schema validation                    ← guarantees parseable structure
     ↓
 Two simultaneous views:
   • Operator console (Gradio)                 ← teacher's laptop
-  • /display fullscreen view (auto-updating)  ← classroom projector
+  • /display fullscreen view (SSE push)       ← classroom projector
 ```
 
 Seven visualization templates cover the most common pedagogical speech patterns:
@@ -102,7 +94,8 @@ Seven visualization templates cover the most common pedagogical speech patterns:
 
 ### Beyond the basics
 
-- **Second screen (`/display`)** — a separate fullscreen URL that auto-fades to the latest card. Teacher mirrors it to the projector while operating Gradio on the laptop.
+- **Second screen (`/display`)** — a separate fullscreen URL that fades to the latest card the moment it exists (Server-Sent Events, 1 s polling as fallback). Teacher mirrors it to the projector while operating Gradio on the laptop.
+- **Course glossary + lecture language** — pick the Whisper term glossary for today's course (`glossaries/*.txt`, add your own without touching code) and the lecture language (中文 / English / auto). English lectures get English cards directly.
 - **History** — every card auto-saves to `history/` as both `.json` (data + transcript) and `.html` (standalone, screenshot-able).
 - **Card extension** — the lecturer can say *"oh, also add robust control and gain scheduling"* and click "Extend last card" to append items to an existing card without rebuilding from scratch. Template is locked to the original card's template.
 - **Template hint** — operator can force a specific template (override LLM's auto-pick) when the natural-language signal is ambiguous.
@@ -115,7 +108,7 @@ This is the answer to *"why not just use a cloud LLM?"*:
 1. **Open weights, classroom-deployable.** Gemma's license permits commercial and educational use without per-call fees, so any teacher can deploy Sensei locally and ship it forward to the next classroom — the privacy/cost story is real, not aspirational.
 2. **Edge-friendly sizes.** The `e2b` variant (~7 GB) and `e4b` variant (~10 GB) both fit on a laptop GPU. Edge models exist precisely for scenarios like classrooms.
 3. **Native JSON / structured output.** Sensei needs *structured* output (JSON conforming to a fixed schema), not free-form text. Gemma 4 via Ollama enforces this at the sampling level — invalid JSON is *unproducible*. A Pydantic post-validation pass is the second safety net.
-4. **Multimodal capability.** Phase 2 will add image input — point a webcam at the whiteboard, let Sensei integrate the chalk diagram with the spoken explanation.
+4. **Multimodal capability, deliberately deferred.** Gemma 4 can see and hear; whiteboard capture was evaluated and shelved because it needs extra hardware and forces a model swap against Whisper on a 12 GB GPU (see [WRITEUP §8](WRITEUP.md#8-roadmap-and-honest-limits)). It can be re-enabled for rooms that already have a board camera.
 
 ## Quick start
 
@@ -165,11 +158,19 @@ python -m core.asr path/to/test.wav
 python -m core.pipeline "風機監控系統的流程是先量測振動，再特徵抽取，然後分類，最後報警"
 ```
 
-### 5. Launch the Gradio app
+### 5. Launch Sensei
+
+```powershell
+.\start_sensei.ps1
+# checks Ollama + gemma4:e2b, starts the app, opens the operator console and /display
+```
+
+or, on any OS:
 
 ```bash
 python -m frontend.app
-# open http://localhost:7860
+# operator console: http://localhost:7860
+# projector view:   http://localhost:7860/display  (F11 for fullscreen)
 ```
 
 ## VRAM budget on RTX 4080 (12 GB)
@@ -189,34 +190,34 @@ If quality priority: switch model to `gemma4:e4b` in `core/llm.py` AND ASR to me
 ```
 sensei/
 ├── core/
-│   ├── asr.py           ← Faster-Whisper wrapper, domain glossary
-│   ├── llm.py           ← Gemma 4 via Ollama, tool calling + JSON-mode fallback
+│   ├── asr.py           ← Faster-Whisper wrapper; language + glossary switchable at runtime
+│   ├── glossary.py      ← loads glossaries/*.txt into Whisper initial_prompts
+│   ├── llm.py           ← Gemma 4 via Ollama, tool calling + JSON-mode fallback, zh/en output
 │   ├── templates.py     ← 7 visualization schemas (Pydantic)
-│   └── pipeline.py      ← end-to-end glue + quiz_card spoken-trigger guard
+│   ├── pipeline.py      ← end-to-end glue + quiz_card spoken-trigger guard
+│   └── live_mic.py      ← server-side microphone capture (F8 toggle)
 ├── frontend/
-│   ├── app.py           ← Gradio operator console + 7 HTML renderers + /display route
-│   └── ...
+│   ├── app.py           ← Gradio operator console: layout, handlers, history
+│   ├── renderers.py     ← THEMES + 7 HTML renderers (≥24 px / ≥36 px large-print rule)
+│   ├── i18n.py          ← operator-UI strings (zh / en)
+│   └── display.py       ← /display projector page, SSE feed, FastAPI mount
+├── glossaries/          ← one ASR glossary per course (auto_control, machine_learning, wind_energy, general.en)
 ├── prompts/
 │   ├── classifier.txt   ← Gemma 4's instruction (template choice + slot filling)
 │   └── extender.txt     ← prompt for "extend existing card with new content"
+├── start_sensei.ps1     ← one-click launcher (Windows)
+├── dry_run.ps1          ← 9-step preflight check
+├── PROJECT_ENHANCEMENT_PROPOSAL.md ← post-hackathon roadmap (start here)
+├── WRITEUP.md           ← hackathon writeup (archived)
 ├── requirements.txt
 └── README.md            ← you are here
 ```
 
-## 9-day plan (May 9 → May 18)
+## Hackathon history
 
-- [x] **Day 1 (5/9):** Core pipeline skeleton + Gradio MVP, Ollama backend
-- [x] **Day 2 (5/9 evening):** Real Lucide icons; second-screen `/display` view; history / extend / template-hint features; large-print rule (≥24 px / ≥36 px)
-- [x] **Day 3 (5/9 cont):** Theme switching (dark / light / paper); SWOT and pyramid templates; 8-language projection
-- [x] **Day 3 (5/11):** Live mic + F8 hotkey (record / stop / auto-transcribe → push to `/display`)
-- [x] **Day 3+ (5/11 evening):** `quiz_card` template + Mandarin/English spoken-trigger guard for deterministic in-class quiz flow
-- [x] **Day 5 (folded into Day 1–2):** Native Gemma 4 function-calling — already the primary path; JSON-mode kept as silent fallback
-- [x] **Day 4 (folded into 5/11):** Real classroom audio testing pass via live mic; multiple takes; remaining ASR misses are pronunciation-side, not Gemma 4-side
-- [ ] **Day 6 (5/14):** Full dry-run on the projector + external-mic rig per [DEMO_SCRIPT.md](DEMO_SCRIPT.md)
-- [ ] **Day 7 (5/15):** **Real classroom shoot for demo video** — the critical day
-- [ ] **Day 8 (5/16):** Edit demo video; finalize [WRITEUP.md](WRITEUP.md)
-- [ ] **Day 9 (5/17):** Buffer / README polish / writeup final pass
-- [ ] **Day 10 (5/18):** Submit by 23:59 UTC
+Sensei was built in nine days (2026-05-09 → 05-18) for the Gemma 4 Good Hackathon and submitted to the Main Track, the Future of Education impact prize and the Ollama special-technology prize. **It did not place.** Everything the submission contained still works and is documented in [WRITEUP.md](WRITEUP.md) (archived as submitted) and [DEMO_SCRIPT.md](DEMO_SCRIPT.md).
+
+The project continues with a different yardstick: not "does the demo video land", but "does the teacher open it next week". The roadmap, the tech-debt list and the open decisions are in [PROJECT_ENHANCEMENT_PROPOSAL.md](PROJECT_ENHANCEMENT_PROPOSAL.md).
 
 ## License
 

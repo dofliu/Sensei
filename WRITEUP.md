@@ -1,5 +1,7 @@
 # Sensei — On-Device AI Co-Teacher
 
+> **Archived (2026-09).** This is the technical writeup exactly as submitted to the Gemma 4 Good Hackathon (deadline 2026-05-18). It is kept for the record and is no longer updated; the live roadmap is [PROJECT_ENHANCEMENT_PROPOSAL.md](PROJECT_ENHANCEMENT_PROPOSAL.md).
+
 **Submission for The Gemma 4 Good Hackathon — self-nominated for Main Track + Future of Education Impact Prize + Ollama Special Technology Prize**
 
 ---

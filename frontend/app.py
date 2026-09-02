@@ -1,18 +1,18 @@
 """
-Sensei · Gradio Demo App
+Sensei · Operator console (Gradio)
 ================================
-Run:   python -m frontend.app
-Open:  http://localhost:7860
+Run:   python -m frontend.app        (or .\start_sensei.ps1 on Windows)
+Open:  http://localhost:7860          operator console (teacher's laptop)
+       http://localhost:7860/display  projector view (F11 fullscreen)
 
-Features:
-- Upload / record audio, get structured visualization
-- Text-input mode for fast iteration without microphone
-- Live JSON view (for debugging + transparency in demo video)
-- 4 template renderers (enumeration, comparison, flow, hierarchy)
+This file owns the Gradio Blocks layout, the event handlers and history
+persistence. The pieces it used to inline now live next door:
+- frontend/renderers.py  THEMES + the 7 card renderers (pure dict -> HTML)
+- frontend/i18n.py       operator-UI strings (zh / en)
+- frontend/display.py    /display page, SSE feed, FastAPI mount
 
-This is the MVP UI. For the final demo we'll likely build a separate
-fullscreen "second monitor" view in pure HTML/JS, but Gradio is perfect
-for the first 3 days of iteration.
+Input modes: live microphone (F8 toggle), audio file / browser recording,
+text (for testing). Every card is saved to history/ and pushed to /display.
 """
 
 import json

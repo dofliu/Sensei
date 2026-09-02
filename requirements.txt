@@ -1,4 +1,4 @@
-# Sensei dependencies — Python 3.11+ recommended
+# Sensei dependencies — Python 3.12 (the version the project is developed on)
 # ------------------------------------------------
 # Prereq (one-time, NOT in pip):
 #   1. Install Ollama from https://ollama.com  (Windows/Mac/Linux)
@@ -9,20 +9,24 @@
 #
 # Then:
 #   pip install -r requirements.txt
+#
+# Upper bounds are deliberate: Gradio 6 already broke the 5.x API once
+# (theme/css moved off the Blocks constructor). Bump them on purpose, not by
+# accident on a fresh install.
 
 # ASR
-faster-whisper>=1.0.3
+faster-whisper>=1.0.3,<2
 
 # LLM (Ollama Python client; talks to local Ollama daemon)
-ollama>=0.3.0
+ollama>=0.3.0,<1
 
 # Schema validation
-pydantic>=2.6.0
+pydantic>=2.6.0,<3
 
-# UI
-gradio>=5.0.0
+# UI (Gradio 6 API; the FastAPI mount for /display comes with it)
+gradio>=6.0,<7
 
-# Audio I/O (for live mic mode in Phase 2)
-sounddevice>=0.4.6
-soundfile>=0.12.1
-numpy>=1.26
+# Audio I/O (live mic mode)
+sounddevice>=0.4.6,<1
+soundfile>=0.12.1,<1
+numpy>=1.26,<3
