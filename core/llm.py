@@ -78,6 +78,18 @@ SYSTEM_TOOLS_PROMPT = (
 )
 
 
+# Output-language directive appended to every generation prompt. "zh" keeps the
+# original Traditional-Chinese behaviour; "en" is for lectures delivered in
+# English, where the card must NOT be translated into Chinese.
+# Switched at runtime via SenseiLLM.set_output_lang() (operator UI).
+OUTPUT_LANG_DIRECTIVE = {
+    "zh": "所有文字欄位一律用繁體中文（不要簡體）。",
+    "en": ("LANGUAGE OVERRIDE: the lecture is delivered in English. Write EVERY text "
+           "value (title, subtitle, names, descriptions, options, questions) in English. "
+           "Do not translate anything into Chinese."),
+}
+
+
 def _build_tools() -> list[dict]:
     """從 TEMPLATE_REGISTRY 自動生成 Ollama tools spec。
     `template` 欄位是模板識別常數，由工具名稱本身承載，因此從 parameters 移除以免混淆模型。
@@ -134,6 +146,17 @@ class SenseiLLM:
             f"[Sensei LLM] Ready · backend=Ollama · model={config.MODEL_ID}"
             f" · tools={len(self._tools)}"
         )
+
+        # Card language for *generation* (zh | en). Distinct from translate(),
+        # which re-renders an existing Chinese card into another language.
+        self.output_lang = "zh"
+
+    def set_output_lang(self, lang: str) -> None:
+        self.output_lang = lang if lang in OUTPUT_LANG_DIRECTIVE else "zh"
+        print(f"[Sensei LLM] output language -> {self.output_lang}", flush=True)
+
+    def _lang_directive(self) -> str:
+        return OUTPUT_LANG_DIRECTIVE.get(self.output_lang, OUTPUT_LANG_DIRECTIVE["zh"])
 
     def _verify_model(self):
         """Fail fast with a helpful message if the model isn't pulled."""
@@ -210,7 +233,7 @@ class SenseiLLM:
             response = self.client.chat(
                 model=self.config.MODEL_ID,
                 messages=[
-                    {"role": "system", "content": SYSTEM_TOOLS_PROMPT},
+                    {"role": "system", "content": SYSTEM_TOOLS_PROMPT + "\n8. " + self._lang_directive()},
                     {"role": "user",   "content": text},
                 ],
                 tools=tools,
@@ -378,7 +401,7 @@ class SenseiLLM:
             "1. 最外層必須有 \"template\" 欄位，值為 \"enumeration_cards\"（**不可**把 items 改名為 enumeration_cards）。\n"
             "2. items 陣列含 4–6 個物件，每個物件**必須同時有** name、icon、desc 三個欄位。\n"
             "3. name ≤ 8 字、desc ≤ 10 字、icon 用 Lucide slug。\n"
-            "4. 繁體中文，無 markdown fence，無重複欄位。\n\n"
+            f"4. {self._lang_directive()} 無 markdown fence，無重複欄位。\n\n"
             f"# 今日內容\n{joined}\n\n"
             "# 直接輸出符合上述範例格式的 JSON："
         )
@@ -413,7 +436,8 @@ class SenseiLLM:
         # Empirically gemma4:e2b is more reliable when the imperative is plain English.
         prompt = (
             f"Card: {json.dumps(clean, ensure_ascii=False)}\n\n"
-            "Suggest 3 follow-up topics in Traditional Chinese (each under 25 chars).\n"
+            f"Suggest 3 follow-up topics in {'English' if self.output_lang == 'en' else 'Traditional Chinese'} "
+            "(each under 25 chars).\n"
             "Output ONLY a JSON array of 3 strings.\n"
             'Example: ["xxxxx", "yyyyy", "zzzzz"]\n\n'
             "JSON array:"
@@ -484,6 +508,8 @@ class SenseiLLM:
             .replace("{user_text}", new_text)
             .replace("{template}", template)
         )
+        if self.output_lang != "zh":
+            prompt = f"# 輸出語言（最高優先）\n\n{self._lang_directive()}\n\n" + prompt
         response = self.client.chat(
             model=self.config.MODEL_ID,
             messages=[{"role": "user", "content": prompt}],
@@ -513,6 +539,8 @@ class SenseiLLM:
     # ──────────────────────────────────────────────
     def _generate(self, user_text: str, template_hint: str | None = None) -> str:
         prompt = self.prompt_template.replace("{user_text}", user_text)
+        if self.output_lang != "zh":
+            prompt = f"# 輸出語言（最高優先）\n\n{self._lang_directive()}\n\n" + prompt
         if template_hint:
             prompt = (
                 "# 模板強制提示（最高優先）\n\n"

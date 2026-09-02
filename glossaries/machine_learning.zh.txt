@@ -1,0 +1,10 @@
+# title: 機器學習 / 深度學習（繁中）
+本逐字稿是大學機器學習與深度學習課程的講課內容。
+可能出現的專有名詞：
+監督式學習、非監督式學習、強化學習、分類、迴歸、分群、
+過擬合、欠擬合、正則化、交叉驗證、混淆矩陣、準確率、召回率、F1、
+梯度下降、學習率、反向傳播、損失函數、激活函數、ReLU、Softmax、
+CNN、卷積神經網路、RNN、LSTM、Transformer、注意力機制、
+Embedding、嵌入向量、微調、fine-tuning、LLM、大型語言模型、
+RAG、檢索增強生成、向量資料庫、prompt、提示詞、
+PyTorch、TensorFlow、scikit-learn、Hugging Face、Ollama、Gemma。

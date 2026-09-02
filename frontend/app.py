@@ -35,6 +35,7 @@ import uvicorn
 
 from core.live_mic import LiveMicCapture
 from core.pipeline import SenseiPipeline
+from core.glossary import list_glossaries
 from frontend.renderers import THEMES, CURRENT_THEME, render_html
 from frontend.i18n import CURRENT_UI_LANG, T, _list_ui_languages
 from frontend.display import build_fastapi_app
@@ -50,6 +51,19 @@ print("=" * 60)
 pipeline = SenseiPipeline()
 live_mic = LiveMicCapture()
 print("\n[OK] Sensei ready.\n")
+
+
+def _list_glossaries() -> list:
+    """課程詞彙表下拉：[(title, id)]，來源 glossaries/*.txt。"""
+    return [(g.title, g.id) for g in list_glossaries()]
+
+
+def _list_lecture_languages() -> list:
+    return [
+        (T("lect_zh"),   "zh"),
+        (T("lect_en"),   "en"),
+        (T("lect_auto"), "auto"),
+    ]
 
 
 def _list_themes() -> list:
@@ -271,6 +285,18 @@ def _resolve_payload_for_lang(payload: dict, json_path: Path | None) -> dict:
     return translated
 
 
+def handle_glossary_change(glossary_id: str):
+    """切課程詞彙表：只影響之後的 ASR，不重算既有卡片。"""
+    if glossary_id:
+        pipeline.set_glossary(glossary_id)
+
+
+def handle_lecture_language_change(lang_value: str):
+    """切授課語言：Whisper 語言 + Gemma 4 產卡語言一起換。"""
+    if lang_value in ("zh", "en", "auto"):
+        pipeline.set_lecture_language(lang_value)
+
+
 def handle_theme_change(theme_name: str):
     """切主題：套用後立刻重新渲染最新一張卡片到操作畫面；/display 下次輪詢時自動換色。"""
     if theme_name in THEMES:
@@ -398,6 +424,8 @@ def handle_ui_language_change(ui_lang_value: str):
         gr.update(label=T("card_lang_label")),                    # language_picker
         gr.update(label=T("tpl_hint_label"), choices=_list_template_hints()),    # template_hint
         gr.update(label=T("extend_label"),   choices=_list_extend_choices()),    # extend_source
+        gr.update(label=T("glossary_label")),                                    # glossary_picker
+        gr.update(label=T("lecture_lang_label"), choices=_list_lecture_languages()),  # lecture_lang_picker
         # Tabs (label = tab title)
         gr.update(label=T("tab_live")),                           # tab_live
         gr.update(label=T("tab_audio")),                          # tab_audio
@@ -888,6 +916,25 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
             scale=2,
         )
 
+    # Course settings (PROPOSAL B2): which glossary Whisper is primed with, and
+    # what language the lecture is in. Both apply to every input mode.
+    with gr.Row():
+        glossary_choices = _list_glossaries()
+        glossary_picker = gr.Dropdown(
+            label=T("glossary_label"),
+            choices=glossary_choices,
+            value=glossary_choices[0][1] if glossary_choices else None,
+            interactive=True,
+            scale=3,
+        )
+        lecture_lang_picker = gr.Dropdown(
+            label=T("lecture_lang_label"),
+            choices=_list_lecture_languages(),
+            value="zh",
+            interactive=True,
+            scale=2,
+        )
+
     with gr.Tabs() as tabs_root:
         with gr.Tab(T("tab_live")) as tab_live:
             live_md = gr.Markdown(T("live_md"))
@@ -1005,12 +1052,15 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
     history_refresh.click(refresh_dropdowns, None, dropdown_targets)
 
     theme_picker.change(handle_theme_change, theme_picker, html_out)
+    glossary_picker.change(handle_glossary_change, glossary_picker, None)
+    lecture_lang_picker.change(handle_lecture_language_change, lecture_lang_picker, None)
     language_picker.change(handle_language_change, language_picker, html_out)
 
     # UI language toggle (operator-facing only) — updates many components at once.
     ui_lang_outputs = [
         header_md, live_md, history_md, suggestions_md,
         ui_language_picker, theme_picker, language_picker, template_hint, extend_source,
+        glossary_picker, lecture_lang_picker,
         tab_live, tab_audio, tab_text, tab_history,
         live_status, live_btn,
         audio_in, audio_btn, audio_extend_btn,
