@@ -292,6 +292,8 @@ Day 10 · 2026-05-18 (Mon)  📤 SUBMIT before 23:59 UTC
 
 ## 8. Immediate next tasks (final-stretch order)
 
+> **Post-hackathon (2026-09-02)**: the hackathon closed 2026-05-18. The queue below is the frozen final-stretch record. For the v2 roadmap (Phase A/B/C, tech-debt list, open decisions) read [PROJECT_ENHANCEMENT_PROPOSAL.md](PROJECT_ENHANCEMENT_PROPOSAL.md) first; it supersedes §7–§8 once the user accepts it.
+
 The build is functionally complete. From here the queue is rehearsal + content, not features:
 
 1. **Dry-run the full DEMO_SCRIPT** on the actual rig (laptop + projector + external mic) on Day 6. Catch timing, F8 misses, theme/font issues with eyes-on-projector view. Pay special attention to the new Demo C (quiz spoken-trigger) — confirm "來考一題" survives the user's microphone setup before shoot day.
