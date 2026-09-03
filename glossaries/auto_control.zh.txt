@@ -1,0 +1,11 @@
+# title: 自動控制 / 工業自動化（繁中）
+# Sensei 的原始詞彙表（core/asr.py 舊 INITIAL_PROMPT），內容未改。
+本逐字稿是大學自動控制與工業自動化課程的講課內容。
+可能出現的專有名詞：
+PID 控制、比例積分微分、最佳控制、LQR、MPC、模型預測控制、
+類神經、神經網路、非線性控制、滑模控制、回授線性化、
+強健控制、H 無限大、μ 合成、卡爾曼濾波、
+SCADA、Modbus、PLC、ST 程式、結構化文本、IEC 61131、
+RAG、檢索增強、知識圖譜、向量資料庫、嵌入、
+風機、風力發電機、變槳、偏航、振動、軸承、齒輪箱、
+Gemma、Whisper、function calling、function 呼叫。

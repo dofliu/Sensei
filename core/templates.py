@@ -1,7 +1,8 @@
 """
 Sensei · Visual Templates Schema
 ================================
-Pydantic schemas defining the 4 visualization templates Sensei supports.
+Pydantic schemas defining the 7 visualization templates Sensei supports
+(enumeration / comparison / flow / hierarchy / SWOT / pyramid / quiz_card).
 
 Design principle: LLM picks the template, fills the slots. Templates are
 fixed — this prevents the model from inventing new layouts every utterance,
@@ -11,7 +12,10 @@ Adding a new template:
 1. Define the Pydantic class here.
 2. Register it in `TEMPLATE_REGISTRY` (bottom of file).
 3. Add an example to prompts/classifier.txt.
-4. Add a renderer in frontend/app.py::render_html.
+4. Add a renderer in frontend/renderers.py and register it in RENDERERS.
+5. Add the tool description in core/llm.py::TOOL_DESCRIPTIONS and a
+   dropdown label in frontend/app.py::_list_template_hints + frontend/i18n.py.
+6. Smoke-test on a representative transcript before merging.
 """
 
 from typing import Literal

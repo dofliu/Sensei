@@ -1,18 +1,18 @@
 """
-Sensei · Gradio Demo App
+Sensei · Operator console (Gradio)
 ================================
-Run:   python -m frontend.app
-Open:  http://localhost:7860
+Run:   python -m frontend.app        (or .\start_sensei.ps1 on Windows)
+Open:  http://localhost:7860          operator console (teacher's laptop)
+       http://localhost:7860/display  projector view (F11 fullscreen)
 
-Features:
-- Upload / record audio, get structured visualization
-- Text-input mode for fast iteration without microphone
-- Live JSON view (for debugging + transparency in demo video)
-- 4 template renderers (enumeration, comparison, flow, hierarchy)
+This file owns the Gradio Blocks layout, the event handlers and history
+persistence. The pieces it used to inline now live next door:
+- frontend/renderers.py  THEMES + the 7 card renderers (pure dict -> HTML)
+- frontend/i18n.py       operator-UI strings (zh / en)
+- frontend/display.py    /display page, SSE feed, FastAPI mount
 
-This is the MVP UI. For the final demo we'll likely build a separate
-fullscreen "second monitor" view in pure HTML/JS, but Gradio is perfect
-for the first 3 days of iteration.
+Input modes: live microphone (F8 toggle), audio file / browser recording,
+text (for testing). Every card is saved to history/ and pushed to /display.
 """
 
 import json
@@ -32,11 +32,13 @@ except Exception:
 
 import gradio as gr
 import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
 
 from core.live_mic import LiveMicCapture
 from core.pipeline import SenseiPipeline
+from core.glossary import list_glossaries
+from frontend.renderers import THEMES, CURRENT_THEME, render_html
+from frontend.i18n import CURRENT_UI_LANG, T, _list_ui_languages
+from frontend.display import build_fastapi_app
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -51,83 +53,17 @@ live_mic = LiveMicCapture()
 print("\n[OK] Sensei ready.\n")
 
 
-# ────────────────────────────────────────────────────────────────────
-# Renderers — one per template
-# ────────────────────────────────────────────────────────────────────
-
-THEMES = {
-    "dark": {
-        "container_bg": "linear-gradient(135deg,#0f172a,#1e293b)",
-        "fg": "#e2e8f0",
-        "fg_strong": "#f1f5f9",
-        "fg_muted": "#94a3b8",
-        "fg_dim": "#cbd5e1",
-        "card_bg": "rgba(30,41,59,0.6)",
-        "card_border": "rgba(148,163,184,0.15)",
-        "table_header_bg": "rgba(148,163,184,0.08)",
-        "table_border": "rgba(148,163,184,0.1)",
-        "step_arrow": "#475569",
-        "accents": ["#38bdf8", "#a78bfa", "#34d399", "#fb923c", "#f472b6", "#facc15"],
-        "swot_s": "#34d399",  # green   — internal positive
-        "swot_w": "#fb923c",  # orange  — internal negative
-        "swot_o": "#38bdf8",  # blue    — external positive
-        "swot_t": "#f472b6",  # magenta — external negative
-        "display_bg": "#0b1220",
-    },
-    "light": {
-        "container_bg": "linear-gradient(135deg,#f8fafc,#e2e8f0)",
-        "fg": "#1e293b",
-        "fg_strong": "#0f172a",
-        "fg_muted": "#475569",
-        "fg_dim": "#334155",
-        "card_bg": "rgba(255,255,255,0.92)",
-        "card_border": "rgba(15,23,42,0.12)",
-        "table_header_bg": "rgba(15,23,42,0.05)",
-        "table_border": "rgba(15,23,42,0.08)",
-        "step_arrow": "#94a3b8",
-        "accents": ["#0284c7", "#7c3aed", "#059669", "#ea580c", "#db2777", "#ca8a04"],
-        "swot_s": "#059669",
-        "swot_w": "#ea580c",
-        "swot_o": "#0284c7",
-        "swot_t": "#db2777",
-        "display_bg": "#f1f5f9",
-    },
-    "paper": {
-        # Paper editorial palette per Claude Design proposal (refined oklch low-chroma).
-        "container_bg": "linear-gradient(135deg,#f6f1e6,#efe7d3)",
-        "fg":           "#29261b",  # ink — body text
-        "fg_strong":    "#0f0d0a",  # very dark ink — headings
-        "fg_muted":     "#7a6a52",  # warm grey — meta / muted
-        "fg_dim":       "#5c4d36",  # mid ink — body secondary
-        "card_bg":      "#fffdf6",  # paper-on-paper
-        "card_border":  "#d8cdb3",  # line — subtle paper divider
-        "table_header_bg": "rgba(122,106,82,0.08)",
-        "table_border":    "rgba(122,106,82,0.18)",
-        "step_arrow":   "#b3a181",
-        # Six accent palette, low chroma, editorial:
-        "accents": ["#D97757", "#1F3A6E", "#4A7C59", "#C2741B", "#7D2E6E", "#C0392B"],
-        "swot_s": "#4A7C59",  # sage green — internal positive
-        "swot_w": "#D97757",  # warm orange — internal negative
-        "swot_o": "#1F3A6E",  # deep blue — external positive
-        "swot_t": "#C0392B",  # brick red — external negative
-        "display_bg": "#f6f1e6",
-    },
-}
-
-CURRENT_THEME = {"name": "dark"}  # mutable so handlers can flip it without globals dance
+def _list_glossaries() -> list:
+    """課程詞彙表下拉：[(title, id)]，來源 glossaries/*.txt。"""
+    return [(g.title, g.id) for g in list_glossaries()]
 
 
-def _theme() -> dict:
-    return THEMES[CURRENT_THEME["name"]]
-
-
-def _container_style() -> str:
-    t = _theme()
-    return (
-        f"background:{t['container_bg']};"
-        f"padding:44px;border-radius:18px;color:{t['fg']};"
-        f"font-family:{FONT_BODY};"
-    )
+def _list_lecture_languages() -> list:
+    return [
+        (T("lect_zh"),   "zh"),
+        (T("lect_en"),   "en"),
+        (T("lect_auto"), "auto"),
+    ]
 
 
 def _list_themes() -> list:
@@ -136,502 +72,6 @@ def _list_themes() -> list:
         (T("theme_light"), "light"),
         (T("theme_paper"), "paper"),
     ]
-
-
-LUCIDE_ALIASES = {
-    # ───── People (top source of silent failures: LLM prefers "person" but Lucide has "user")
-    "person": "user", "people": "users", "group": "users", "team": "users",
-    "family": "users", "member": "user", "members": "users",
-    "man": "user", "woman": "user", "child": "baby", "kid": "baby",
-    "teacher": "graduation-cap", "student": "graduation-cap", "professor": "graduation-cap",
-    # ───── Tools / config
-    "gear": "settings", "tool": "wrench", "tools": "wrench",
-    "config": "settings", "configuration": "settings", "options": "settings",
-    "preferences": "settings", "fix": "wrench",
-    # ───── AI / compute
-    "robot": "bot", "ai": "bot", "machine": "cpu", "gpu": "cpu",
-    "computer": "cpu", "pc": "cpu", "chip": "cpu",
-    # ───── Charts / data
-    "chart": "bar-chart-3", "graph": "line-chart",
-    "stats": "bar-chart-3", "statistics": "bar-chart-3", "analytics": "bar-chart-3",
-    # ───── Communication
-    "chat": "message-circle", "talk": "message-circle", "discuss": "message-circle",
-    "speak": "mic", "speech": "mic", "voice": "mic", "microphone": "mic",
-    "email": "mail", "letter": "mail",
-    # ───── Status
-    "ok": "check", "success": "check-circle", "done": "check-circle",
-    "warning": "alert-triangle", "danger": "alert-triangle", "caution": "alert-triangle",
-    "error": "x-circle", "fail": "x-circle", "failure": "x-circle",
-    "fire": "flame",
-    # ───── Concepts (common in teaching)
-    "idea": "lightbulb", "bulb": "lightbulb", "light": "lightbulb",
-    "thinking": "brain", "thought": "brain", "mind": "brain",
-    "knowledge": "book", "learn": "book-open", "study": "book-open",
-    "education": "graduation-cap", "school": "graduation-cap",
-    "course": "book-open", "lesson": "book-open",
-    # ───── Energy / industrial (Sensei's home turf)
-    "turbine": "wind", "rotor": "wind", "windmill": "wind",
-    "energy": "zap", "electricity": "zap", "power": "zap", "voltage": "zap",
-    "motor": "cog", "engine": "cog", "machine-part": "cog",
-    "factory": "factory", "plant": "factory", "manufacturing": "factory",
-    # ───── Web / world
-    "world": "globe", "earth": "globe", "internet": "globe", "web": "globe",
-    "online": "globe",
-    # ───── Common UI
-    "screen": "monitor", "desktop": "monitor", "display": "monitor",
-    "house": "home", "money": "dollar-sign", "coin": "coins",
-    "currency": "dollar-sign", "price": "dollar-sign",
-    "date": "calendar", "schedule": "calendar", "time": "clock",
-    "delete": "trash-2", "remove": "trash-2", "trash": "trash-2",
-    "add": "plus", "create": "plus-circle", "new": "plus-circle",
-    "edit": "pencil", "modify": "pencil", "find": "search",
-    "save": "save", "load": "upload", "open": "folder-open",
-    # ───── Direction / flow
-    "next": "arrow-right", "prev": "arrow-left", "previous": "arrow-left",
-    "up": "arrow-up", "down": "arrow-down",
-    # ───── Misc that LLM commonly emits
-    "lock": "lock", "secure": "shield", "security": "shield", "safe": "shield",
-    "ranking": "trophy", "award": "trophy", "winner": "trophy",
-    "growth": "trending-up", "increase": "trending-up", "decrease": "trending-down",
-}
-
-
-def _lucide_svg(name: str, color: str = "#e2e8f0") -> str:
-    """
-    Render a Lucide icon via CSS mask + lucide-static CDN.
-    The icon shape is loaded from unpkg as an SVG; the visible colour comes
-    from `color` (so accent tinting works without inlining SVG paths).
-
-    Pipeline: lower → strip → kebab → alias-lookup → URL. Empty / missing
-    names fall back to 'circle' to avoid a broken mask url. Aliases catch
-    common LLM goofs (e.g. 'person' → 'user') so the demo never shows an
-    empty-square icon when the LLM picks a sensible-but-wrong slug.
-
-    Sizes scaled up for projector legibility (see CLAUDE.md §3 font rule).
-    """
-    icon = (name or "").strip().lower().replace(" ", "-").replace("_", "-")
-    icon = LUCIDE_ALIASES.get(icon, icon)
-    if not icon:
-        icon = "circle"
-    url = f"https://unpkg.com/lucide-static@latest/icons/{icon}.svg"
-    return (
-        f"<div style=\"width:56px;height:56px;border-radius:14px;"
-        f"background:{color}22;display:flex;align-items:center;"
-        f"justify-content:center;\">"
-        f"<div style=\"width:34px;height:34px;background:{color};"
-        f"-webkit-mask:url('{url}') center/contain no-repeat;"
-        f"mask:url('{url}') center/contain no-repeat;\"></div>"
-        f"</div>"
-    )
-
-
-def render_enumeration_cards(d: dict) -> str:
-    """
-    Paper-editorial enumeration: serif title, paper-on-paper cards with subtle shadow,
-    icon + name in line, desc as Mono-flavoured caption underneath.
-    """
-    t = _theme()
-    accents = t["accents"]
-    items = d.get("items", [])
-    cards = []
-    for i, it in enumerate(items):
-        c = accents[i % len(accents)]
-        desc = (it.get("desc") or "").strip().replace("\n", " ")
-        name = (it.get("name") or "").strip()
-        # 防呆：LLM 偶爾把 desc 抄成 name，視覺上重複沒意義 → 直接不渲染
-        if desc and desc == name:
-            desc = ""
-        desc_html = (
-            f"<div style='font-size:20px;color:{t['fg_muted']};margin-top:12px;"
-            f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-            f"line-height:1.3;font-family:{FONT_MONO};letter-spacing:0.02em;'>"
-            f"&nbsp;·&nbsp;{desc}</div>"
-            if desc else ""
-        )
-        cards.append(
-            f"<div style='flex:1;min-width:280px;background:{t['card_bg']};"
-            f"border:1px solid {t['card_border']};border-radius:12px;"
-            f"padding:26px 24px;border-top:3px solid {c};overflow:hidden;"
-            f"box-shadow:0 1px 2px rgba(15,13,10,0.05),0 2px 6px rgba(15,13,10,0.04);'>"
-            f"<div style='display:flex;align-items:center;gap:18px;'>"
-            f"{_lucide_svg(it.get('icon',''), c)}"
-            f"<div style='font-family:{FONT_SERIF};font-size:34px;font-weight:600;"
-            f"color:{t['fg_strong']};line-height:1.15;letter-spacing:-0.01em;'>{it['name']}</div>"
-            f"</div>"
-            f"{desc_html}"
-            f"</div>"
-        )
-    cards_html = "".join(cards)
-    subtitle_html = (
-        f"<div style='font-size:22px;color:{t['fg_muted']};margin-bottom:32px;"
-        f"font-style:italic;font-family:{FONT_SERIF};'>{d.get('subtitle','')}</div>"
-        if d.get("subtitle") else ""
-    )
-    return (
-        f"<div style='{_container_style()}'>"
-        f"<div style='font-family:{FONT_SERIF};font-size:48px;font-weight:500;"
-        f"color:{t['fg_strong']};margin-bottom:8px;line-height:1.05;letter-spacing:-0.015em;'>"
-        f"{d['title']}</div>"
-        f"{subtitle_html}"
-        f"<div style='display:flex;gap:20px;flex-wrap:wrap;'>{cards_html}</div>"
-        f"</div>"
-    )
-
-
-def render_comparison_table(d: dict) -> str:
-    t = _theme()
-    a_color = t["accents"][0]
-    b_color = t["accents"][4]
-    mono_label_style = (
-        f"font-family:{FONT_MONO};font-size:13px;font-weight:500;"
-        f"letter-spacing:0.18em;text-transform:uppercase;"
-    )
-    rows = "".join(
-        f"<tr>"
-        f"<td style='padding:20px 18px;border-bottom:1px solid {t['table_border']};"
-        f"color:{t['fg_muted']};font-size:22px;font-family:{FONT_BODY};'>{r['aspect']}</td>"
-        f"<td style='padding:20px 18px;border-bottom:1px solid {t['table_border']};"
-        f"color:{a_color};font-size:26px;font-family:{FONT_BODY};font-weight:500;'>{r['a_value']}</td>"
-        f"<td style='padding:20px 18px;border-bottom:1px solid {t['table_border']};"
-        f"color:{b_color};font-size:26px;font-family:{FONT_BODY};font-weight:500;'>{r['b_value']}</td>"
-        f"</tr>"
-        for r in d.get("rows", [])
-    )
-    return (
-        f"<div style='{_container_style()}'>"
-        f"<div style='font-family:{FONT_SERIF};font-size:48px;font-weight:500;"
-        f"color:{t['fg_strong']};margin-bottom:28px;line-height:1.05;letter-spacing:-0.015em;'>"
-        f"{d['title']}</div>"
-        f"<table style='width:100%;border-collapse:collapse;'>"
-        f"<thead><tr style='background:{t['table_header_bg']};'>"
-        f"<th style='padding:14px 18px;text-align:left;{mono_label_style}color:{t['fg_muted']};width:30%;'>"
-        f"Aspect · 面向</th>"
-        f"<th style='padding:14px 18px;text-align:left;{mono_label_style}color:{a_color};'>"
-        f"{d['a_name']}</th>"
-        f"<th style='padding:14px 18px;text-align:left;{mono_label_style}color:{b_color};'>"
-        f"{d['b_name']}</th>"
-        f"</tr></thead><tbody>{rows}</tbody></table></div>"
-    )
-
-
-def render_flow_diagram(d: dict) -> str:
-    """
-    Paper-editorial flow: serif title, paper-on-paper step boxes with bullet + Mono "STEP N",
-    serif step name, mono description, arrow glyph between.
-    """
-    t = _theme()
-    accents = t["accents"]
-    parts = []
-    steps = d.get("steps", [])
-    for i, s in enumerate(steps):
-        c = accents[i % len(accents)]
-        desc = (s.get("desc") or "").strip().replace("\n", " ")
-        name = (s.get("name") or "").strip()
-        if desc and desc == name:
-            desc = ""
-        desc_html = (
-            f"<div style='font-size:18px;color:{t['fg_muted']};margin-top:6px;"
-            f"font-family:{FONT_BODY};line-height:1.35;'>{desc}</div>"
-            if desc else ""
-        )
-        parts.append(
-            f"<div style='background:{t['card_bg']};"
-            f"border:1px solid {t['card_border']};border-radius:10px;padding:24px 28px;"
-            f"min-width:200px;text-align:left;color:{t['fg_strong']};"
-            f"box-shadow:0 1px 2px rgba(15,13,10,0.05),0 2px 6px rgba(15,13,10,0.04);'>"
-            f"<div style='font-family:{FONT_MONO};font-size:13px;font-weight:500;"
-            f"letter-spacing:0.18em;text-transform:uppercase;color:{t['fg_muted']};'>"
-            f"<span style='color:{c};font-size:14px;'>●</span>&nbsp; STEP {i+1:02d}</div>"
-            f"<div style='font-family:{FONT_SERIF};font-size:30px;font-weight:500;"
-            f"margin-top:8px;line-height:1.15;letter-spacing:-0.01em;'>{s['name']}</div>"
-            f"{desc_html}"
-            f"</div>"
-        )
-        if i < len(steps) - 1:
-            parts.append(
-                f"<div style='font-size:30px;color:{t['step_arrow']};align-self:center;"
-                f"padding:0 8px;font-family:{FONT_SERIF};'>→</div>"
-            )
-    return (
-        f"<div style='{_container_style()}'>"
-        f"<div style='font-family:{FONT_SERIF};font-size:48px;font-weight:500;"
-        f"color:{t['fg_strong']};margin-bottom:32px;line-height:1.05;letter-spacing:-0.015em;'>"
-        f"{d['title']}</div>"
-        f"<div style='display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;'>"
-        f"{''.join(parts)}</div></div>"
-    )
-
-
-def render_hierarchy_tree(d: dict) -> str:
-    t = _theme()
-    accents = t["accents"]
-
-    def render_node(node: dict, depth: int = 0) -> str:
-        c = accents[depth % len(accents)]
-        children = node.get("children", [])
-        children_html = "".join(render_node(ch, depth + 1) for ch in children)
-        # Root uses serif (heading feel); deeper levels use sans (body feel)
-        if depth == 0:
-            family, weight, size = FONT_SERIF, 400, 34
-        elif depth == 1:
-            family, weight, size = FONT_BODY, 600, 26
-        else:
-            family, weight, size = FONT_BODY, 500, 22
-        return (
-            f"<div style='margin-left:{depth*36}px;padding:9px 0;"
-            f"font-family:{family};font-size:{size}px;font-weight:{weight};line-height:1.35;'>"
-            f"<span style='color:{c};'>▸ </span>"
-            f"<span style='color:{t['fg_strong']};'>{node['name']}</span>"
-            f"</div>{children_html}"
-        )
-
-    return (
-        f"<div style='{_container_style()}'>"
-        f"<div style='font-family:{FONT_SERIF};font-size:48px;font-weight:500;"
-        f"color:{t['fg_strong']};margin-bottom:28px;line-height:1.05;letter-spacing:-0.015em;'>"
-        f"{d['title']}</div>"
-        f"<div>{render_node(d['root'])}</div>"
-        f"</div>"
-    )
-
-
-def render_swot(d: dict) -> str:
-    """
-    Paper-editorial SWOT 2x2: refined letter monogram + Mono label, paper card boxes.
-    """
-    t = _theme()
-    fg_muted = t["fg_muted"]
-    fg_strong = t["fg_strong"]
-    card_bg = t["card_bg"]
-    card_border = t["card_border"]
-    quadrants = [
-        ("S", "Strengths · 優勢",     d.get("strengths", []),     t["swot_s"]),
-        ("W", "Weaknesses · 劣勢",    d.get("weaknesses", []),    t["swot_w"]),
-        ("O", "Opportunities · 機會", d.get("opportunities", []), t["swot_o"]),
-        ("T", "Threats · 威脅",       d.get("threats", []),       t["swot_t"]),
-    ]
-    quad_html = []
-    for letter, label, items, color in quadrants:
-        items_html = []
-        for it in items:
-            desc = (it.get("desc") or "").strip()
-            desc_part = (
-                f" <span style='color:{fg_muted};font-size:18px;font-family:{FONT_MONO};'>"
-                f"· {desc}</span>"
-                if desc else ""
-            )
-            items_html.append(
-                f"<div style='font-size:22px;color:{fg_strong};"
-                f"margin-top:9px;line-height:1.4;font-family:{FONT_BODY};'>"
-                f"<span style='color:{color};font-weight:600;'>▸ </span>"
-                f"{it['name']}{desc_part}</div>"
-            )
-        quad_html.append(
-            f"<div style='background:{card_bg};border:1px solid {card_border};"
-            f"border-top:3px solid {color};border-radius:12px;padding:24px 26px;"
-            f"box-shadow:0 1px 2px rgba(15,13,10,0.05),0 2px 6px rgba(15,13,10,0.04);'>"
-            f"<div style='display:flex;align-items:baseline;gap:12px;margin-bottom:14px;'>"
-            f"<div style='font-family:{FONT_SERIF_ITALIC};font-size:44px;font-weight:500;"
-            f"font-style:italic;color:{color};line-height:1;'>{letter}</div>"
-            f"<div style='font-family:{FONT_MONO};font-size:13px;font-weight:500;"
-            f"letter-spacing:0.18em;text-transform:uppercase;color:{fg_muted};'>"
-            f"{label}</div>"
-            f"</div>"
-            f"{''.join(items_html)}"
-            f"</div>"
-        )
-    subject_html = (
-        f"<div style='font-size:22px;color:{fg_muted};margin-bottom:28px;"
-        f"font-family:{FONT_SERIF};font-style:italic;'>{d.get('subject','')}</div>"
-        if d.get("subject") else ""
-    )
-    return (
-        f"<div style='{_container_style()}'>"
-        f"<div style='font-family:{FONT_SERIF};font-size:48px;font-weight:500;"
-        f"color:{fg_strong};margin-bottom:8px;line-height:1.05;letter-spacing:-0.015em;'>"
-        f"{d['title']}</div>"
-        f"{subject_html}"
-        f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:20px;'>"
-        f"{''.join(quad_html)}</div></div>"
-    )
-
-
-def render_pyramid(d: dict) -> str:
-    """
-    Paper-editorial pyramid: stacked centred slabs from narrow apex to wide base,
-    each in serif name + mono caption.
-    """
-    t = _theme()
-    accents = t["accents"]
-    fg_strong = t["fg_strong"]
-    fg_muted = t["fg_muted"]
-    layers = d.get("layers", [])
-    n = len(layers)
-    if n == 0:
-        return f"<div style='{_container_style()}'>(no layers)</div>"
-
-    min_w, max_w = 36, 92
-    layer_html = []
-    for i, layer in enumerate(layers):
-        if n == 1:
-            width_pct = max_w
-        else:
-            width_pct = min_w + (i / (n - 1)) * (max_w - min_w)
-        c = accents[i % len(accents)]
-        desc = (layer.get("desc") or "").strip()
-        desc_html = (
-            f"<div style='font-size:16px;color:{fg_muted};margin-top:4px;"
-            f"font-family:{FONT_MONO};letter-spacing:0.05em;'>{desc}</div>"
-            if desc else ""
-        )
-        layer_html.append(
-            f"<div style='width:{width_pct:.1f}%;background:{t['card_bg']};"
-            f"border-left:4px solid {c};border-top:1px solid {t['card_border']};"
-            f"border-right:1px solid {t['card_border']};border-bottom:1px solid {t['card_border']};"
-            f"border-radius:6px;"
-            f"padding:18px 28px;text-align:center;margin:6px auto;"
-            f"box-shadow:0 1px 2px rgba(15,13,10,0.05),0 2px 6px rgba(15,13,10,0.04);'>"
-            f"<div style='font-family:{FONT_SERIF};font-size:30px;font-weight:500;"
-            f"color:{fg_strong};line-height:1.15;letter-spacing:-0.01em;'>{layer['name']}</div>"
-            f"{desc_html}"
-            f"</div>"
-        )
-    subject_html = (
-        f"<div style='font-size:22px;color:{fg_muted};margin-bottom:28px;"
-        f"font-family:{FONT_SERIF};font-style:italic;'>{d.get('subject','')}</div>"
-        if d.get("subject") else ""
-    )
-    return (
-        f"<div style='{_container_style()}'>"
-        f"<div style='font-family:{FONT_SERIF};font-size:48px;font-weight:500;"
-        f"color:{fg_strong};margin-bottom:8px;line-height:1.05;letter-spacing:-0.015em;'>"
-        f"{d['title']}</div>"
-        f"{subject_html}"
-        f"<div>{''.join(layer_html)}</div>"
-        f"</div>"
-    )
-
-
-def render_quiz_card(d: dict) -> str:
-    """
-    Paper-editorial quiz card for projection.
-
-    Design intent: the answer is intentionally NOT rendered on screen — students
-    sitting near the projector would spoiler themselves before the teacher gets
-    to lead the reveal. The teacher reads the correct answer + rationale from
-    the operator UI (JSON tab on their laptop) and announces it verbally. The
-    `answer` / `explanation` fields remain in the data for future reveal-toggle.
-
-    For the same reason, all four option cards are styled identically — no
-    visual highlight on the correct one.
-    """
-    t = _theme()
-    accents = t["accents"]
-    fg_strong = t["fg_strong"]
-    fg_muted = t["fg_muted"]
-    card_bg = t["card_bg"]
-    card_border = t["card_border"]
-
-    options = d.get("options", []) or []
-    # Defensive padding so a partial LLM output still renders something coherent
-    while len(options) < 4:
-        options.append("—")
-    labels = ["A", "B", "C", "D"]
-
-    mono_label_style = (
-        f"font-family:{FONT_MONO};font-size:15px;font-weight:500;"
-        f"letter-spacing:0.18em;text-transform:uppercase;color:{fg_muted};"
-    )
-
-    difficulty = (d.get("difficulty") or "medium").lower()
-    diff_label = {"easy": "EASY", "medium": "MEDIUM", "hard": "HARD"}.get(difficulty, "MEDIUM")
-    badge_html = (
-        f"<div style='{mono_label_style}margin-bottom:20px;'>"
-        f"<span style='color:{accents[0]};font-size:16px;'>●</span>&nbsp; "
-        f"QUIZ · {diff_label}</div>"
-    )
-
-    option_cards = []
-    for i, opt in enumerate(options[:4]):
-        c = accents[i % len(accents)]
-        option_cards.append(
-            f"<div style='background:{card_bg};border:1px solid {card_border};"
-            f"border-radius:14px;padding:32px 36px;display:flex;align-items:center;gap:28px;"
-            f"box-shadow:0 1px 2px rgba(15,13,10,0.05),0 2px 6px rgba(15,13,10,0.04);'>"
-            f"<div style='font-family:{FONT_SERIF_ITALIC};font-size:72px;font-weight:500;"
-            f"font-style:italic;color:{c};line-height:1;min-width:64px;text-align:center;'>"
-            f"{labels[i]}</div>"
-            f"<div style='font-family:{FONT_BODY};font-size:38px;color:{fg_strong};"
-            f"line-height:1.3;font-weight:500;'>{opt}</div>"
-            f"</div>"
-        )
-
-    title_html = ""
-    if d.get("title"):
-        title_html = (
-            f"<div style='font-family:{FONT_SERIF};font-size:44px;font-weight:500;"
-            f"color:{fg_muted};margin-bottom:22px;line-height:1.15;"
-            f"letter-spacing:-0.015em;font-style:italic;'>{d['title']}</div>"
-        )
-
-    return (
-        f"<div style='{_container_style()}'>"
-        f"{badge_html}"
-        f"{title_html}"
-        f"<div style='font-family:{FONT_SERIF};font-size:60px;font-weight:500;"
-        f"color:{fg_strong};margin-bottom:40px;line-height:1.25;letter-spacing:-0.01em;'>"
-        f"{d.get('question','')}</div>"
-        f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:22px;'>"
-        f"{''.join(option_cards)}</div>"
-        f"</div>"
-    )
-
-
-RENDERERS = {
-    "enumeration_cards": render_enumeration_cards,
-    "comparison_table":  render_comparison_table,
-    "flow_diagram":      render_flow_diagram,
-    "hierarchy_tree":    render_hierarchy_tree,
-    "swot":              render_swot,
-    "pyramid":           render_pyramid,
-    "quiz_card":         render_quiz_card,
-}
-
-
-def _render_friendly_fallback(data: dict) -> str:
-    """救援也失敗時，給投影機與操作端一個有設計感的「再試一次」畫面，
-    而不是把原始 JSON / Pydantic error 傾倒給觀眾看。
-    完整錯誤資訊仍存在 history JSON 與 console log，研究 / debug 時可看。"""
-    t = _theme()
-    return (
-        f"<div style='{_container_style()}'>"
-        f"<div style='font-family:{FONT_SERIF_ITALIC};font-size:54px;font-weight:400;font-style:italic;"
-        f"color:{t['fg_strong']};line-height:1.1;letter-spacing:-0.015em;margin-bottom:14px;'>"
-        f"Sensei is thinking…</div>"
-        f"<div style='font-family:{FONT_BODY};font-size:22px;color:{t['fg_muted']};"
-        f"line-height:1.5;max-width:680px;'>"
-        f"The model needed to retry. Please rephrase, or speak the topic again."
-        f"</div>"
-        f"<div style='margin-top:36px;font-family:{FONT_MONO};font-size:11px;"
-        f"letter-spacing:0.18em;text-transform:uppercase;color:{t['fg_muted']};opacity:0.6;'>"
-        f"Sensei · structuring engine, not oracle</div>"
-        f"</div>"
-    )
-
-
-def render_html(data: dict) -> str:
-    if not data:
-        return ""
-    template = data.get("template", "")
-    renderer = RENDERERS.get(template)
-    if renderer:
-        try:
-            return renderer(data)
-        except Exception as e:
-            print(f"[Sensei] render_html exception in {template}: {e}", flush=True)
-            return _render_friendly_fallback(data)
-    # Fallback for raw / unknown
-    return _render_friendly_fallback(data)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -644,202 +84,6 @@ HISTORY_DIR.mkdir(exist_ok=True)
 LATEST_SENTINEL = "__latest__"
 TEMPLATE_HINT_AUTO = "__auto__"
 
-
-# ────────────────────────────────────────────────────────────────────
-# UI internationalization (operator-facing labels only).
-# Card content language is a separate axis — see CURRENT_LANG / language_picker.
-# ────────────────────────────────────────────────────────────────────
-
-CURRENT_UI_LANG = {"name": "zh"}
-
-
-def _ui_lang() -> str:
-    return CURRENT_UI_LANG["name"]
-
-
-UI_TEXTS = {
-    "zh": {
-        "header_md": (
-            "# 🎓 Sensei\n"
-            "**On-device AI co-teacher** · 把老師講的話即時整理成投影機上的視覺卡片\n"
-            "不上雲端。沒有隱私風險。跑在一台筆電上。\n\n"
-            "*Powered by Faster-Whisper + Gemma 4*"
-        ),
-        "ui_lang_label":   "介面語言",
-        "theme_label":     "主題",
-        "card_lang_label": "卡片語言（投影機顯示）",
-        "tpl_hint_label":  "模板（按「整理成新卡片」時生效）",
-        "extend_label":    "延伸來源（按「延伸上一張」時用）",
-        "tab_live":        "🔴 Live 麥克風",
-        "tab_audio":       "🎤 音訊輸入（檔案 / 錄音）",
-        "tab_text":        "📝 文字輸入（測試用）",
-        "tab_history":     "📚 歷史紀錄",
-        "live_md": (
-            "**課堂主要操作**：\n\n"
-            "1. 按下方紅色大按鈕（或鍵盤 **F8**、設定為 F8 的簡報筆按鍵）→ 開始錄音\n"
-            "2. 再按一次（或 F8）→ 停止 → 自動轉文字 → 產卡片 → 同步推到 `/display`\n\n"
-            "*提示：F8 在任何 Sensei 分頁都生效；輸入文字時不會誤觸。*"
-        ),
-        "live_status_label": "狀態",
-        "live_status_idle":  "待機中（按下方按鈕或 F8 開始）",
-        "live_btn_idle":     "🎙️ 開始錄音 (F8)",
-        "live_btn_recording": "⏹ 停止並生成 (F8)",
-        "live_status_recording": "🔴 錄音中…再按一次（或 F8）結束並生成卡片",
-        "live_status_no_audio":  "(沒有擷取到音訊；請確認麥克風裝置)",
-        "live_status_done":      "✅ 已生成 — 卡片同步出現在 /display",
-        "audio_in_label":     "說一段話，或上傳音檔",
-        "btn_new_card":       "整理成新卡片",
-        "btn_extend":         "延伸上一張",
-        "text_in_label":      "貼一段老師講的話",
-        "text_in_placeholder": "例：同學，控制不是只有 PID 控制，還有最佳、類神經、非線性、強健控制",
-        "examples_label":     "點選範例",
-        "history_md": (
-            "每次生成的卡片都會自動存到 `history/` 目錄："
-            "`.json` 是資料（含逐字稿），`.html` 是可直接用瀏覽器打開／截圖的卡片頁。"
-        ),
-        "history_dropdown_label": "選一筆紀錄（最新在最上面）",
-        "history_refresh_btn":    "🔄 重新整理",
-        "transcript_label":   "📝 逐字稿",
-        "json_label":         "📦 結構化 JSON",
-        "html_label":         "🎴 視覺化卡片",
-        "hist_html_label":    "🎴 卡片重現",
-        "accordion_title":    "💡 操作端輔助（不投影到 /display）",
-        "summary_btn":        "📑 整理今日總結",
-        "suggestions_md":     "**下一步建議** — 卡片產生後 ~3 秒會自動出現 3 個方向；點擊任一個會用該句生成下一張卡。",
-        "suggest_btn_idle":   "（待生成）",
-        # Theme labels
-        "theme_dark":         "🌙 Dark（暗教室 / 投影機）",
-        "theme_light":        "☀️ Light（亮教室 / 螢幕分享）",
-        "theme_paper":        "📜 Paper（米黃紙 / 黑板派）",
-        # Template hint labels
-        "tpl_auto":           "🤖 自動判斷（依語意挑模板）",
-        "tpl_enum":           "📇 列舉卡片（並列項目）",
-        "tpl_compare":        "⚖️ 比較表（兩者差異）",
-        "tpl_flow":           "➡️ 流程圖（步驟）",
-        "tpl_hier":           "🌳 階層樹（分類）",
-        "tpl_swot":           "🎯 SWOT 分析（優劣機威）",
-        "tpl_pyramid":        "🔺 金字塔（線性層級）",
-        "tpl_quiz":           "📝 隨堂測驗（4 選 1）",
-        # Extend source sentinel
-        "extend_latest":      "📌 最近一張",
-        # Error messages (returned by handlers when inputs are bad)
-        "err_no_audio":       "請上傳音檔或錄音",
-        "err_no_text":        "請輸入文字",
-        "err_no_extend_text": "請輸入要新增的內容",
-        "err_no_base":        "❗ 找不到要延伸的卡片（歷史是空的，或選項已失效）",
-        "err_no_today":       "（今天還沒有內容可以總結）",
-        "err_no_history":     "（今日歷史沒有逐字稿可彙整）",
-        "err_summary_failed": "（總結生成失敗：{error}）",
-        "err_no_suggestion":  "（請選擇有內容的建議）",
-        "err_empty_seed":     "（建議內容為空）",
-        "summary_transcript": "[今日課程總結 · 整合 {n} 段內容]",
-        # Help overlay
-        "help_title":         "Sensei 快捷鍵",
-        "help_or":            "或",
-        "help_record":        "開始 / 停止錄音（任何分頁都生效；輸入框內按不會誤觸）",
-        "help_show":          "顯示這個說明",
-        "help_close":         "關閉這個說明",
-        "help_projector":     "投影機畫面",
-        "help_fullscreen":    "F11 全螢幕",
-        "help_note":          "操作介面這邊維持在筆電上、只有你會看到。",
-        "help_dismiss":       "點空白處或按 Esc 關閉",
-    },
-    "en": {
-        "header_md": (
-            "# 🎓 Sensei\n"
-            "**On-device AI co-teacher** · turns a lecturer's spoken words into structured visual cards in real time.\n"
-            "No cloud. No privacy risk. Runs on a single laptop.\n\n"
-            "*Powered by Faster-Whisper + Gemma 4*"
-        ),
-        "ui_lang_label":   "UI Language",
-        "theme_label":     "Theme",
-        "card_lang_label": "Card Language (projector display)",
-        "tpl_hint_label":  "Template (applies to 'New Card')",
-        "extend_label":    "Extend Source (for 'Extend' button)",
-        "tab_live":        "🔴 Live Microphone",
-        "tab_audio":       "🎤 Audio Input (file / record)",
-        "tab_text":        "📝 Text Input (testing)",
-        "tab_history":     "📚 History",
-        "live_md": (
-            "**Primary classroom flow**:\n\n"
-            "1. Click the red button below (or **F8**, or a presenter pen key mapped to F8) → start recording\n"
-            "2. Click again (or F8) → stop → auto-transcribe → generate card → push to `/display`\n\n"
-            "*Tip: F8 works from any tab; it never fires while typing in a text field.*"
-        ),
-        "live_status_label": "Status",
-        "live_status_idle":  "Idle (click the button below or press F8 to start)",
-        "live_btn_idle":     "🎙️ Start Recording (F8)",
-        "live_btn_recording": "⏹ Stop & Generate (F8)",
-        "live_status_recording": "🔴 Recording… press again (or F8) to stop and generate the card",
-        "live_status_no_audio":  "(No audio captured; please check the microphone device)",
-        "live_status_done":      "✅ Card generated — synced to /display",
-        "audio_in_label":     "Speak, or upload an audio file",
-        "btn_new_card":       "New Card",
-        "btn_extend":         "Extend Last",
-        "text_in_label":      "Paste a snippet of the lecture",
-        "text_in_placeholder": "e.g. Students, control isn't only PID — there's also optimal, neural, nonlinear, and robust control",
-        "examples_label":     "Click an example",
-        "history_md": (
-            "Every generated card is saved to `history/`: `.json` (data + transcript) and "
-            "`.html` (a standalone page you can open in a browser or screenshot)."
-        ),
-        "history_dropdown_label": "Pick a record (newest first)",
-        "history_refresh_btn":    "🔄 Refresh",
-        "transcript_label":   "📝 Transcript",
-        "json_label":         "📦 Structured JSON",
-        "html_label":         "🎴 Visual Card",
-        "hist_html_label":    "🎴 Card replay",
-        "accordion_title":    "💡 Operator Tools (not projected to /display)",
-        "summary_btn":        "📑 Today's Summary",
-        "suggestions_md":     "**Next-step suggestions** — three directions appear ~3 s after each card. Click one to seed the next card.",
-        "suggest_btn_idle":   "(generating…)",
-        # Theme labels
-        "theme_dark":         "🌙 Dark (dim classroom / projector)",
-        "theme_light":        "☀️ Light (bright classroom / screen share)",
-        "theme_paper":        "📜 Paper (editorial / chalkboard feel)",
-        # Template hint labels
-        "tpl_auto":           "🤖 Auto-detect (let the model pick)",
-        "tpl_enum":           "📇 Enumeration cards (parallel items)",
-        "tpl_compare":        "⚖️ Comparison table (A vs B)",
-        "tpl_flow":           "➡️ Flow diagram (steps)",
-        "tpl_hier":           "🌳 Hierarchy tree (sub-classes)",
-        "tpl_swot":           "🎯 SWOT analysis",
-        "tpl_pyramid":        "🔺 Pyramid (linear layers)",
-        "tpl_quiz":           "📝 Quick quiz (4-option MCQ)",
-        # Extend source sentinel
-        "extend_latest":      "📌 Most recent card",
-        # Error messages
-        "err_no_audio":       "Please upload audio or record first",
-        "err_no_text":        "Please type some text",
-        "err_no_extend_text": "Please type the content to add",
-        "err_no_base":        "❗ No card to extend (history is empty, or selection is stale)",
-        "err_no_today":       "(No content to summarize today yet)",
-        "err_no_history":     "(Today's history has no transcripts to compile)",
-        "err_summary_failed": "(Summary failed: {error})",
-        "err_no_suggestion":  "(Please pick a suggestion that has content)",
-        "err_empty_seed":     "(Suggestion content is empty)",
-        "summary_transcript": "[Today's session summary · {n} segments combined]",
-        # Help overlay
-        "help_title":         "Sensei Hotkeys",
-        "help_or":            "or",
-        "help_record":        "Start / stop recording (works from any tab; never fires while typing)",
-        "help_show":          "Show this help",
-        "help_close":         "Close this help",
-        "help_projector":     "Projector view",
-        "help_fullscreen":    "F11 fullscreen",
-        "help_note":          "The operator console stays on your laptop — students never see it.",
-        "help_dismiss":       "Click outside or press Esc to dismiss",
-    },
-}
-
-
-def T(key: str) -> str:
-    """Look up an operator-UI string in the current language."""
-    return UI_TEXTS[_ui_lang()].get(key, UI_TEXTS["zh"].get(key, key))
-
-
-def _list_ui_languages() -> list:
-    return [("中文", "zh"), ("English", "en")]
 
 CURRENT_LANG = {"name": "zh"}  # mutable container so handlers flip without globals dance
 
@@ -979,6 +223,12 @@ def _save_to_history(
     if is_summary:
         payload["is_summary"] = True
     json_path = HISTORY_DIR / f"{base}.json"
+    n = 1
+    while json_path.exists():
+        # Two cards within the same second must not overwrite each other.
+        n += 1
+        json_path = HISTORY_DIR / f"{base}_{n}.json"
+    base = json_path.stem
     json_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -1033,6 +283,18 @@ def _resolve_payload_for_lang(payload: dict, json_path: Path | None) -> dict:
     if json_path is not None:
         _persist_translation(json_path, target, translated)
     return translated
+
+
+def handle_glossary_change(glossary_id: str):
+    """切課程詞彙表：只影響之後的 ASR，不重算既有卡片。"""
+    if glossary_id:
+        pipeline.set_glossary(glossary_id)
+
+
+def handle_lecture_language_change(lang_value: str):
+    """切授課語言：Whisper 語言 + Gemma 4 產卡語言一起換。"""
+    if lang_value in ("zh", "en", "auto"):
+        pipeline.set_lecture_language(lang_value)
 
 
 def handle_theme_change(theme_name: str):
@@ -1162,6 +424,8 @@ def handle_ui_language_change(ui_lang_value: str):
         gr.update(label=T("card_lang_label")),                    # language_picker
         gr.update(label=T("tpl_hint_label"), choices=_list_template_hints()),    # template_hint
         gr.update(label=T("extend_label"),   choices=_list_extend_choices()),    # extend_source
+        gr.update(label=T("glossary_label")),                                    # glossary_picker
+        gr.update(label=T("lecture_lang_label"), choices=_list_lecture_languages()),  # lecture_lang_picker
         # Tabs (label = tab title)
         gr.update(label=T("tab_live")),                           # tab_live
         gr.update(label=T("tab_audio")),                          # tab_audio
@@ -1328,14 +592,6 @@ EXAMPLES = [
 ]
 
 
-# Primary serif uses Playfair Display (multi-weight 400-900); Instrument Serif kept
-# as italic-flavoured accent (single weight 400, beautiful for italic moments only).
-FONT_SERIF        = "'Playfair Display', 'Noto Serif TC', Georgia, serif"
-FONT_SERIF_ITALIC = "'Instrument Serif', 'Playfair Display', 'Noto Serif TC', Georgia, serif"
-FONT_BODY         = "'Geist', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif"
-FONT_MONO         = "'JetBrains Mono', Menlo, Consolas, monospace"
-
-
 # ────────────────────────────────────────────────────────────────────
 # Gradio theme + CSS — 把操作介面從 SaaS 灰調成 paper editorial
 # ────────────────────────────────────────────────────────────────────
@@ -1499,7 +755,6 @@ button.show-api, .show-api { display: none !important; }
 """
 
 
-
 def build_hotkey_overlay_html() -> str:
     """產生 hotkey help overlay 的 HTML。依當前 UI 語言切換內容。"""
     return f"""
@@ -1610,11 +865,10 @@ if (!window.__senseiHotkeyBound) {
 """
 
 
-with gr.Blocks(
-    title="Sensei · On-device AI Co-Teacher",
-    theme=SENSEI_THEME,
-    css=SENSEI_CSS,
-) as app:
+with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
+    # theme / css are passed to gr.mount_gradio_app in __main__ (Gradio 6 moved
+    # them off the Blocks constructor). SENSEI_CSS is additionally injected via
+    # the overlay HTML block so it survives any launch path.
     # Gradio 6 injection point — js_on_load runs once when this HTML mounts.
     # The HTML body carries the help-overlay markup (hidden by default); the JS
     # binds F8 / Ctrl+Space / ? / Esc on the document level.
@@ -1658,6 +912,25 @@ with gr.Blocks(
             label=T("extend_label"),
             choices=_list_extend_choices(),
             value=LATEST_SENTINEL,
+            interactive=True,
+            scale=2,
+        )
+
+    # Course settings (PROPOSAL B2): which glossary Whisper is primed with, and
+    # what language the lecture is in. Both apply to every input mode.
+    with gr.Row():
+        glossary_choices = _list_glossaries()
+        glossary_picker = gr.Dropdown(
+            label=T("glossary_label"),
+            choices=glossary_choices,
+            value=glossary_choices[0][1] if glossary_choices else None,
+            interactive=True,
+            scale=3,
+        )
+        lecture_lang_picker = gr.Dropdown(
+            label=T("lecture_lang_label"),
+            choices=_list_lecture_languages(),
+            value="zh",
             interactive=True,
             scale=2,
         )
@@ -1779,12 +1052,15 @@ with gr.Blocks(
     history_refresh.click(refresh_dropdowns, None, dropdown_targets)
 
     theme_picker.change(handle_theme_change, theme_picker, html_out)
+    glossary_picker.change(handle_glossary_change, glossary_picker, None)
+    lecture_lang_picker.change(handle_lecture_language_change, lecture_lang_picker, None)
     language_picker.change(handle_language_change, language_picker, html_out)
 
     # UI language toggle (operator-facing only) — updates many components at once.
     ui_lang_outputs = [
         header_md, live_md, history_md, suggestions_md,
         ui_language_picker, theme_picker, language_picker, template_hint, extend_source,
+        glossary_picker, lecture_lang_picker,
         tab_live, tab_audio, tab_text, tab_history,
         live_status, live_btn,
         audio_in, audio_btn, audio_extend_btn,
@@ -1800,171 +1076,10 @@ with gr.Blocks(
     )
 
 
-# ────────────────────────────────────────────────────────────────────
-# Second-screen / projector view — read-only fullscreen card display
-#
-# 設計目的：老師上課時主操作畫面在筆電（Gradio UI）；
-# 接投影機的那一面用瀏覽器打開 /display，按 F11 全螢幕，
-# 只看到最新的卡片，沒有任何控制元件。
-# 前端用 JS 每秒輪詢 /display/data，新卡片到來時做淡入淡出。
-# ────────────────────────────────────────────────────────────────────
-
-DISPLAY_HTML = """<!doctype html>
-<html lang="zh-TW">
-<head>
-<meta charset="utf-8">
-<title>Sensei · /display</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: #f6f1e6; color: #29261b;
-    font-family: 'Geist', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
-    transition: background 0.4s ease, color 0.4s ease;
-    /* Subtle paper grain via tiny radial-gradient noise */
-    background-image:
-      radial-gradient(rgba(58,42,20,0.025) 1px, transparent 1px),
-      radial-gradient(rgba(58,42,20,0.018) 1px, transparent 1px);
-    background-size: 4px 4px, 7px 7px;
-    background-position: 0 0, 2px 2px;
-  }
-  #header {
-    position: fixed; top: 22px; left: 36px; right: 36px;
-    display: flex; justify-content: space-between; align-items: baseline;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: #7a6a52; opacity: 0.85; z-index: 10;
-    pointer-events: none;
-  }
-  #footer {
-    position: fixed; bottom: 22px; left: 36px; right: 36px;
-    display: flex; justify-content: space-between; align-items: baseline;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: #7a6a52; opacity: 0.7; z-index: 10;
-    pointer-events: none;
-  }
-  #footer .dot { color: #4A7C59; font-size: 14px; vertical-align: middle; }
-  #stage {
-    padding: 80px 60px 80px;
-    min-height: 100vh;
-    box-sizing: border-box;
-    transition: opacity 0.35s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  #stage.fading { opacity: 0; }
-  #stage > div { width: 100%; max-width: 1600px; }
-  #empty {
-    text-align: center;
-    padding-top: 30vh; font-size: 24px;
-    font-family: 'Instrument Serif', serif;
-    font-style: italic; letter-spacing: 0.02em;
-    color: #7a6a52; opacity: 0.7;
-  }
-</style>
-</head>
-<body>
-<div id="header">
-  <span>SENSEI · /display</span>
-  <span id="clock-readout">Lecture · --:--</span>
-</div>
-<div id="stage"><div id="empty">Waiting for the first card…</div></div>
-<div id="footer">
-  <span><span class="dot">●</span>&nbsp; ON-DEVICE · NOTHING LEAVES THE ROOM</span>
-  <span>Powered by Gemma 4 + Whisper</span>
-</div>
-<script>
-let lastId = "";
-let lastTheme = "";
-
-function tick() {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  const el = document.getElementById("clock-readout");
-  if (el) el.textContent = `Lecture · ${hh}:${mm}:${ss}`;
-}
-setInterval(tick, 1000);
-tick();
-
-async function poll() {
-  try {
-    const r = await fetch("/display/data", { cache: "no-store" });
-    if (!r.ok) return;
-    const d = await r.json();
-    if (d.bg && d.bg !== lastTheme) {
-      document.body.style.background = d.bg;
-      if (d.fg) document.body.style.color = d.fg;
-      lastTheme = d.bg;
-    }
-    if (d.id && d.id !== lastId) {
-      const stage = document.getElementById("stage");
-      stage.classList.add("fading");
-      setTimeout(() => {
-        stage.innerHTML = d.html;
-        stage.classList.remove("fading");
-        lastId = d.id;
-      }, 320);
-    }
-  } catch (e) { /* network blip — silent */ }
-}
-setInterval(poll, 1000);
-poll();
-</script>
-</body>
-</html>
-"""
-
-
-def _build_fastapi_app() -> FastAPI:
-    """把 Gradio 應用 mount 到 FastAPI 上，並加上 /display 與 /display/data 兩條路由。"""
-    fastapi_app = FastAPI(title="Sensei")
-
-    @fastapi_app.get("/display", response_class=HTMLResponse)
-    async def display_page():
-        return HTMLResponse(DISPLAY_HTML)
-
-    @fastapi_app.get("/display/data")
-    async def display_data():
-        t = _theme()
-        base = {"bg": t["display_bg"], "fg": t["fg"]}
-        entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
-        if not entries:
-            return JSONResponse({"id": "", "html": "", **base})
-        p = entries[0]
-        try:
-            payload = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return JSONResponse({"id": "", "html": "", **base})
-
-        # Pick language; if non-Chinese requested but not yet cached, render Chinese
-        # rather than blocking the projector poll on a Gemma 4 translate call.
-        # (Operator UI's language toggle triggers caching; /display catches up.)
-        target = _lang()
-        if target == "zh":
-            data = payload.get("data", {})
-            cache_key = ""
-        else:
-            field = f"data_{target}"
-            data = payload.get(field) or payload.get("data", {})
-            cache_key = f"_{target}" if payload.get(field) else f"_pending_{target}"
-
-        return JSONResponse({
-            "id": p.stem + cache_key,  # bust cache when lang changes
-            "html": render_html(data),
-            **base,
-        })
-
-    return gr.mount_gradio_app(fastapi_app, app, path="/")
-
-
 if __name__ == "__main__":
-    fastapi_app = _build_fastapi_app()
+    fastapi_app = build_fastapi_app(
+        app, HISTORY_DIR, _lang, theme=SENSEI_THEME, css=SENSEI_CSS,
+    )
     print()
     print("=" * 60)
     print(" Sensei serving on http://localhost:7860")

@@ -7,6 +7,7 @@ audio (file or array) ──► ASR ──► text ──► LLM ──► struc
 from pathlib import Path
 
 from .asr import SenseiASR
+from .glossary import load_glossary
 from .llm import SenseiLLM
 
 
@@ -42,6 +43,22 @@ class SenseiPipeline:
     def __init__(self):
         self.asr = SenseiASR()
         self.llm = SenseiLLM()
+
+    # ── Course settings (operator UI, PROPOSAL B2) ─────────────────────
+    def set_glossary(self, glossary_id: str) -> bool:
+        """Swap the Whisper initial_prompt to glossaries/<id>.<lang>.txt."""
+        g = load_glossary(glossary_id)
+        if g is None:
+            print(f"[Pipeline] unknown glossary '{glossary_id}', keeping current", flush=True)
+            return False
+        self.asr.set_glossary(g.text, label=g.title)
+        return True
+
+    def set_lecture_language(self, lang: str) -> None:
+        """'zh' | 'en' | 'auto'. Drives Whisper's language and the card language
+        Gemma 4 writes in (English lectures get English cards, no translation)."""
+        self.asr.set_language(lang)
+        self.llm.set_output_lang("en" if lang == "en" else "zh")
 
     def _resolve_hint(self, text: str, template_hint: str | None) -> str | None:
         """Apply spoken-trigger overrides before handing off to the LLM."""

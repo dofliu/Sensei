@@ -1,0 +1,7 @@
+# title: General lecture (English)
+# Use with lecture language = en. Add your field's acronyms at the end.
+This is a transcript of a university lecture delivered in English.
+Terms that may appear: PID control, optimal control, robust control, neural network,
+machine learning, supervised learning, reinforcement learning, transformer, embedding,
+SCADA, Modbus, PLC, IEC 61131, wind turbine, pitch, yaw, gearbox, vibration, FFT,
+Gemma, Whisper, Ollama, function calling, retrieval-augmented generation.
