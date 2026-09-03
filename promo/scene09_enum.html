@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><title>列舉卡片 mock</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#070d17}
+body{font-family:"Noto Sans CJK TC","Noto Sans TC",sans-serif;color:#e8eef7;position:relative;
+ --c1:217,119,87;--c2:194,116,27}
+.bg{position:absolute;inset:0;background:
+ radial-gradient(1200px 800px at 24% 18%,rgba(var(--c1),.14),transparent 62%),
+ radial-gradient(1100px 760px at 78% 82%,rgba(var(--c2),.15),transparent 60%),
+ linear-gradient(160deg,#0d1b2e 0%,#070d17 58%,#05070d 100%)}
+.aur{position:absolute;width:1500px;height:1500px;border-radius:50%;filter:blur(90px);opacity:.5;mix-blend-mode:screen}
+.aur.a{background:radial-gradient(circle,rgba(var(--c1),.32),transparent 62%);left:-460px;top:-560px;animation:drift1 22s ease-in-out infinite alternate}
+.aur.b{background:radial-gradient(circle,rgba(var(--c2),.30),transparent 62%);right:-520px;bottom:-620px;animation:drift2 26s ease-in-out infinite alternate}
+@keyframes drift1{to{transform:translate(150px,90px) scale(1.12)}}
+@keyframes drift2{to{transform:translate(-130px,-80px) scale(1.08)}}
+.vig{position:absolute;inset:0;background:radial-gradient(1600px 1000px at 50% 46%,transparent 58%,rgba(0,0,0,.5) 100%);pointer-events:none}
+.grid{position:absolute;inset:0;opacity:.05;background-image:linear-gradient(rgba(232,238,247,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(232,238,247,.5) 1px,transparent 1px);background-size:64px 64px}
+.stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+ --dur:8s;animation:cam var(--dur) ease-in-out both}
+@keyframes cam{from{transform:scale(1)}to{transform:scale(1.055)}}
+.kicker{font-size:30px;font-weight:700;letter-spacing:.55em;text-indent:.55em;color:rgb(var(--c1));text-transform:uppercase}
+.h1{font-size:112px;font-weight:900;line-height:1.14;text-align:center;letter-spacing:.01em;
+ background:linear-gradient(100deg,#f4f8ff 20%,#9be8db 50%,#c4b5fd 80%);-webkit-background-clip:text;background-clip:text;color:transparent;
+ filter:drop-shadow(0 8px 40px rgba(var(--c1),.18))}
+.h2{font-size:76px;font-weight:800;line-height:1.2;text-align:center;color:#f4f8ff}
+.sub{font-size:40px;font-weight:400;color:rgba(232,238,247,.78);text-align:center;line-height:1.6}
+.accent{color:rgb(var(--c1));font-weight:700}
+.chip{display:inline-flex;align-items:center;gap:16px;padding:20px 38px;border-radius:999px;font-size:36px;font-weight:700;white-space:nowrap;
+ background:rgba(20,32,52,.82);border:1.5px solid rgba(150,200,255,.22);box-shadow:0 14px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07)}
+.card{background:linear-gradient(165deg,rgba(24,38,62,.92),rgba(12,20,36,.94));border:1.5px solid rgba(150,200,255,.20);
+ border-radius:26px;box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}
+.badge{display:inline-block;padding:12px 26px;border-radius:12px;font-size:28px;font-weight:700;white-space:nowrap;
+ background:rgba(var(--c1),.14);border:1.5px solid rgba(var(--c1),.45);color:#7ff0df}
+.in{opacity:0;animation:rise 1s cubic-bezier(.16,1,.3,1) both;animation-delay:var(--d,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(56px)}to{opacity:1;transform:none}}
+.pop{opacity:0;animation:pop .8s cubic-bezier(.2,1.4,.35,1) both;animation-delay:var(--d,0s)}
+@keyframes pop{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:scale(1)}}
+.fadein{opacity:0;animation:fi .9s ease both;animation-delay:var(--d,0s)}
+@keyframes fi{to{opacity:1}}
+.glow{animation:glow 2.6s ease-in-out infinite}
+@keyframes glow{0%,100%{filter:drop-shadow(0 0 18px rgba(var(--c1),.25))}50%{filter:drop-shadow(0 0 42px rgba(var(--c1),.55))}}
+.in.glow{animation:rise 1s cubic-bezier(.16,1,.3,1) var(--d,0s) both,glow 2.6s ease-in-out infinite}
+.pop.glow{animation:pop .8s cubic-bezier(.2,1.4,.35,1) var(--d,0s) both,glow 2.6s ease-in-out infinite}
+/* Sensei paper card mock — what the projector actually shows */
+.paper{background:#fffdf6;border:1.5px solid #d8cdb3;border-radius:22px;padding:44px 48px;
+ box-shadow:0 40px 100px rgba(0,0,0,.6);color:#29261b;text-align:left}
+.paper .pt{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:52px;font-weight:700;color:#0f0d0a;line-height:1.1}
+.paper .pm{font-family:"Noto Sans Mono CJK TC",monospace;font-size:19px;letter-spacing:.18em;text-transform:uppercase;color:#7a6a52}
+.pcard{background:#fffdf6;border:1px solid #d8cdb3;border-radius:12px;padding:22px 24px;border-top:4px solid var(--ac,#D97757)}
+.pcard .n{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:34px;font-weight:700;color:#0f0d0a;white-space:nowrap}
+.pcard .d{font-family:"Noto Sans Mono CJK TC",monospace;font-size:18px;color:#7a6a52;margin-top:8px;white-space:nowrap}
+
+.say{font-size:34px;color:rgba(240,222,208,.78);font-style:italic;text-align:center}
+.sheet{width:1500px;margin-top:34px}
+.row{display:flex;gap:20px;margin-top:26px}
+.row>div{flex:1}
+
+</style></head>
+<body>
+<div class="bg"></div><div class="aur a"></div><div class="aur b"></div><div class="grid"></div>
+
+<div class="stage" style="z-index:2">
+
+ <div class="say in" style="--d:.15s">老師說：「控制不是只有 PID，還有最佳、類神經、非線性、強健、適應控制。」</div>
+ <div class="paper sheet in" style="--d:.85s">
+   <div class="pm">● &nbsp;ENUMERATION CARDS</div>
+   <div class="pt" style="margin-top:14px">控制方法的全貌</div>
+   <div style="font-size:26px;color:#7a6a52;margin-top:10px;font-style:italic">不是只有 PID</div>
+   <div class="row">
+     <div class="pcard pop" style="--d:1.5s;--ac:#D97757"><div class="n">PID 控制</div><div class="d">· 業界主流</div></div>
+     <div class="pcard pop" style="--d:1.7s;--ac:#1F3A6E"><div class="n">最佳控制</div><div class="d">· LQR / MPC</div></div>
+     <div class="pcard pop" style="--d:1.9s;--ac:#4A7C59"><div class="n">類神經控制</div><div class="d">· 資料驅動</div></div>
+   </div>
+   <div class="row">
+     <div class="pcard pop" style="--d:2.1s;--ac:#C2741B"><div class="n">非線性控制</div><div class="d">· 滑模 / 回授線性化</div></div>
+     <div class="pcard pop" style="--d:2.3s;--ac:#7D2E6E"><div class="n">強健控制</div><div class="d">· H∞ 穩定性保障</div></div>
+     <div class="pcard pop" style="--d:2.5s;--ac:#C0392B"><div class="n">適應控制</div><div class="d">· 參數線上調整</div></div>
+   </div>
+ </div>
+ <div class="in" style="--d:3.1s;margin-top:30px;font-size:28px;color:rgba(240,222,208,.62);font-family:'Noto Sans Mono CJK TC',monospace">
+   卡片字級 ≥ 24 px · 標題 ≥ 36 px — 為教室最後一排設計
+ </div>
+
+</div>
+<div class="vig" style="z-index:3"></div>
+
+</body></html>

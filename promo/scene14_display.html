@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><title>SSE 推播</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#070d17}
+body{font-family:"Noto Sans CJK TC","Noto Sans TC",sans-serif;color:#e8eef7;position:relative;
+ --c1:74,124,89;--c2:45,212,191}
+.bg{position:absolute;inset:0;background:
+ radial-gradient(1200px 800px at 24% 18%,rgba(var(--c1),.14),transparent 62%),
+ radial-gradient(1100px 760px at 78% 82%,rgba(var(--c2),.15),transparent 60%),
+ linear-gradient(160deg,#0d1b2e 0%,#070d17 58%,#05070d 100%)}
+.aur{position:absolute;width:1500px;height:1500px;border-radius:50%;filter:blur(90px);opacity:.5;mix-blend-mode:screen}
+.aur.a{background:radial-gradient(circle,rgba(var(--c1),.32),transparent 62%);left:-460px;top:-560px;animation:drift1 22s ease-in-out infinite alternate}
+.aur.b{background:radial-gradient(circle,rgba(var(--c2),.30),transparent 62%);right:-520px;bottom:-620px;animation:drift2 26s ease-in-out infinite alternate}
+@keyframes drift1{to{transform:translate(150px,90px) scale(1.12)}}
+@keyframes drift2{to{transform:translate(-130px,-80px) scale(1.08)}}
+.vig{position:absolute;inset:0;background:radial-gradient(1600px 1000px at 50% 46%,transparent 58%,rgba(0,0,0,.5) 100%);pointer-events:none}
+.grid{position:absolute;inset:0;opacity:.05;background-image:linear-gradient(rgba(232,238,247,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(232,238,247,.5) 1px,transparent 1px);background-size:64px 64px}
+.stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+ --dur:9s;animation:cam var(--dur) ease-in-out both}
+@keyframes cam{from{transform:scale(1)}to{transform:scale(1.055)}}
+.kicker{font-size:30px;font-weight:700;letter-spacing:.55em;text-indent:.55em;color:rgb(var(--c1));text-transform:uppercase}
+.h1{font-size:112px;font-weight:900;line-height:1.14;text-align:center;letter-spacing:.01em;
+ background:linear-gradient(100deg,#f4f8ff 20%,#9be8db 50%,#c4b5fd 80%);-webkit-background-clip:text;background-clip:text;color:transparent;
+ filter:drop-shadow(0 8px 40px rgba(var(--c1),.18))}
+.h2{font-size:76px;font-weight:800;line-height:1.2;text-align:center;color:#f4f8ff}
+.sub{font-size:40px;font-weight:400;color:rgba(232,238,247,.78);text-align:center;line-height:1.6}
+.accent{color:rgb(var(--c1));font-weight:700}
+.chip{display:inline-flex;align-items:center;gap:16px;padding:20px 38px;border-radius:999px;font-size:36px;font-weight:700;white-space:nowrap;
+ background:rgba(20,32,52,.82);border:1.5px solid rgba(150,200,255,.22);box-shadow:0 14px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07)}
+.card{background:linear-gradient(165deg,rgba(24,38,62,.92),rgba(12,20,36,.94));border:1.5px solid rgba(150,200,255,.20);
+ border-radius:26px;box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}
+.badge{display:inline-block;padding:12px 26px;border-radius:12px;font-size:28px;font-weight:700;white-space:nowrap;
+ background:rgba(var(--c1),.14);border:1.5px solid rgba(var(--c1),.45);color:#7ff0df}
+.in{opacity:0;animation:rise 1s cubic-bezier(.16,1,.3,1) both;animation-delay:var(--d,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(56px)}to{opacity:1;transform:none}}
+.pop{opacity:0;animation:pop .8s cubic-bezier(.2,1.4,.35,1) both;animation-delay:var(--d,0s)}
+@keyframes pop{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:scale(1)}}
+.fadein{opacity:0;animation:fi .9s ease both;animation-delay:var(--d,0s)}
+@keyframes fi{to{opacity:1}}
+.glow{animation:glow 2.6s ease-in-out infinite}
+@keyframes glow{0%,100%{filter:drop-shadow(0 0 18px rgba(var(--c1),.25))}50%{filter:drop-shadow(0 0 42px rgba(var(--c1),.55))}}
+.in.glow{animation:rise 1s cubic-bezier(.16,1,.3,1) var(--d,0s) both,glow 2.6s ease-in-out infinite}
+.pop.glow{animation:pop .8s cubic-bezier(.2,1.4,.35,1) var(--d,0s) both,glow 2.6s ease-in-out infinite}
+/* Sensei paper card mock — what the projector actually shows */
+.paper{background:#fffdf6;border:1.5px solid #d8cdb3;border-radius:22px;padding:44px 48px;
+ box-shadow:0 40px 100px rgba(0,0,0,.6);color:#29261b;text-align:left}
+.paper .pt{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:52px;font-weight:700;color:#0f0d0a;line-height:1.1}
+.paper .pm{font-family:"Noto Sans Mono CJK TC",monospace;font-size:19px;letter-spacing:.18em;text-transform:uppercase;color:#7a6a52}
+.pcard{background:#fffdf6;border:1px solid #d8cdb3;border-radius:12px;padding:22px 24px;border-top:4px solid var(--ac,#D97757)}
+.pcard .n{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:34px;font-weight:700;color:#0f0d0a;white-space:nowrap}
+.pcard .d{font-family:"Noto Sans Mono CJK TC",monospace;font-size:18px;color:#7a6a52;margin-top:8px;white-space:nowrap}
+
+.two{display:flex;align-items:center;gap:60px;margin-top:50px}
+.dev{border-radius:20px;padding:26px;background:rgba(12,24,18,.86);border:1.5px solid rgba(74,124,89,.38)}
+.dl{width:620px}.dp{width:820px}
+.dh{font-family:"Noto Sans Mono CJK TC",monospace;font-size:19px;letter-spacing:.18em;color:#8fd3a5;margin-bottom:16px}
+.scr{background:#0f1912;border:1px solid rgba(120,170,135,.24);border-radius:12px;padding:20px 22px}
+.ui{display:flex;gap:10px;margin-bottom:14px}
+.ui i{height:34px;border-radius:8px;background:rgba(150,200,170,.16);flex:1}
+.ui i.hot{background:rgba(217,119,87,.5)}
+.mini{background:#fffdf6;border-radius:8px;padding:16px 18px;color:#29261b}
+.mt{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:26px;font-weight:700}
+.mb{display:flex;gap:8px;margin-top:12px}
+.mb i{flex:1;height:38px;border-radius:6px;background:#f2ece0;border-top:3px solid var(--a,#D97757)}
+.arrw{position:relative;width:150px;height:8px;border-radius:4px;background:rgba(74,124,89,.22);overflow:hidden;flex:none}
+.arrw i{position:absolute;inset:0;width:45%;border-radius:4px;background:linear-gradient(90deg,transparent,#7ff0df,transparent);
+ animation:flow2 1.6s linear infinite}
+@keyframes flow2{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+.lbl{font-family:"Noto Sans Mono CJK TC",monospace;font-size:21px;color:#7ff0df;text-align:center;margin-top:14px;white-space:nowrap}
+
+</style></head>
+<body>
+<div class="bg"></div><div class="aur a"></div><div class="aur b"></div><div class="grid"></div>
+
+<div class="stage" style="z-index:2">
+
+ <div class="kicker in" style="--d:.15s;color:#8fd3a5">TWO SCREENS</div>
+ <div class="h2 in" style="--d:.45s;margin-top:18px;font-size:58px">操作在筆電，乾淨的那面給學生</div>
+ <div class="two">
+   <div class="dev dl in" style="--d:1.0s">
+     <div class="dh">💻 &nbsp;OPERATOR CONSOLE · localhost:7860</div>
+     <div class="scr">
+       <div class="ui"><i></i><i></i><i class="hot"></i><i></i></div>
+       <div class="ui"><i></i><i></i></div>
+       <div class="mini"><div class="mt">控制方法的全貌</div>
+         <div class="mb"><i style="--a:#D97757"></i><i style="--a:#1F3A6E"></i><i style="--a:#4A7C59"></i></div></div>
+     </div>
+   </div>
+   <div style="display:flex;flex-direction:column;align-items:center">
+     <div class="arrw fadein" style="--d:1.5s"><i></i></div>
+     <div class="lbl fadein" style="--d:1.7s">SSE push</div>
+   </div>
+   <div class="dev dp in" style="--d:1.4s">
+     <div class="dh">🖥️ &nbsp;PROJECTOR · /display · F11</div>
+     <div class="scr" style="background:#f6f1e6;border-color:#d8cdb3">
+       <div class="mini" style="padding:26px 28px">
+         <div class="mt" style="font-size:38px">控制方法的全貌</div>
+         <div class="mb" style="margin-top:18px"><i style="--a:#D97757;height:62px"></i><i style="--a:#1F3A6E;height:62px"></i><i style="--a:#4A7C59;height:62px"></i></div>
+       </div>
+     </div>
+   </div>
+ </div>
+ <div class="sub in" style="--d:2.5s;margin-top:42px;font-size:30px">
+   卡片一產生就推過去 — 不再每秒輪詢重算，投影機只負責淡入
+ </div>
+
+</div>
+<div class="vig" style="z-index:3"></div>
+
+</body></html>

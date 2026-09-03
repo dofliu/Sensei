@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><title>管線</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#070d17}
+body{font-family:"Noto Sans CJK TC","Noto Sans TC",sans-serif;color:#e8eef7;position:relative;
+ --c1:45,212,191;--c2:56,189,248}
+.bg{position:absolute;inset:0;background:
+ radial-gradient(1200px 800px at 24% 18%,rgba(var(--c1),.14),transparent 62%),
+ radial-gradient(1100px 760px at 78% 82%,rgba(var(--c2),.15),transparent 60%),
+ linear-gradient(160deg,#0d1b2e 0%,#070d17 58%,#05070d 100%)}
+.aur{position:absolute;width:1500px;height:1500px;border-radius:50%;filter:blur(90px);opacity:.5;mix-blend-mode:screen}
+.aur.a{background:radial-gradient(circle,rgba(var(--c1),.32),transparent 62%);left:-460px;top:-560px;animation:drift1 22s ease-in-out infinite alternate}
+.aur.b{background:radial-gradient(circle,rgba(var(--c2),.30),transparent 62%);right:-520px;bottom:-620px;animation:drift2 26s ease-in-out infinite alternate}
+@keyframes drift1{to{transform:translate(150px,90px) scale(1.12)}}
+@keyframes drift2{to{transform:translate(-130px,-80px) scale(1.08)}}
+.vig{position:absolute;inset:0;background:radial-gradient(1600px 1000px at 50% 46%,transparent 58%,rgba(0,0,0,.5) 100%);pointer-events:none}
+.grid{position:absolute;inset:0;opacity:.05;background-image:linear-gradient(rgba(232,238,247,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(232,238,247,.5) 1px,transparent 1px);background-size:64px 64px}
+.stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+ --dur:10s;animation:cam var(--dur) ease-in-out both}
+@keyframes cam{from{transform:scale(1)}to{transform:scale(1.055)}}
+.kicker{font-size:30px;font-weight:700;letter-spacing:.55em;text-indent:.55em;color:rgb(var(--c1));text-transform:uppercase}
+.h1{font-size:112px;font-weight:900;line-height:1.14;text-align:center;letter-spacing:.01em;
+ background:linear-gradient(100deg,#f4f8ff 20%,#9be8db 50%,#c4b5fd 80%);-webkit-background-clip:text;background-clip:text;color:transparent;
+ filter:drop-shadow(0 8px 40px rgba(var(--c1),.18))}
+.h2{font-size:76px;font-weight:800;line-height:1.2;text-align:center;color:#f4f8ff}
+.sub{font-size:40px;font-weight:400;color:rgba(232,238,247,.78);text-align:center;line-height:1.6}
+.accent{color:rgb(var(--c1));font-weight:700}
+.chip{display:inline-flex;align-items:center;gap:16px;padding:20px 38px;border-radius:999px;font-size:36px;font-weight:700;white-space:nowrap;
+ background:rgba(20,32,52,.82);border:1.5px solid rgba(150,200,255,.22);box-shadow:0 14px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07)}
+.card{background:linear-gradient(165deg,rgba(24,38,62,.92),rgba(12,20,36,.94));border:1.5px solid rgba(150,200,255,.20);
+ border-radius:26px;box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}
+.badge{display:inline-block;padding:12px 26px;border-radius:12px;font-size:28px;font-weight:700;white-space:nowrap;
+ background:rgba(var(--c1),.14);border:1.5px solid rgba(var(--c1),.45);color:#7ff0df}
+.in{opacity:0;animation:rise 1s cubic-bezier(.16,1,.3,1) both;animation-delay:var(--d,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(56px)}to{opacity:1;transform:none}}
+.pop{opacity:0;animation:pop .8s cubic-bezier(.2,1.4,.35,1) both;animation-delay:var(--d,0s)}
+@keyframes pop{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:scale(1)}}
+.fadein{opacity:0;animation:fi .9s ease both;animation-delay:var(--d,0s)}
+@keyframes fi{to{opacity:1}}
+.glow{animation:glow 2.6s ease-in-out infinite}
+@keyframes glow{0%,100%{filter:drop-shadow(0 0 18px rgba(var(--c1),.25))}50%{filter:drop-shadow(0 0 42px rgba(var(--c1),.55))}}
+.in.glow{animation:rise 1s cubic-bezier(.16,1,.3,1) var(--d,0s) both,glow 2.6s ease-in-out infinite}
+.pop.glow{animation:pop .8s cubic-bezier(.2,1.4,.35,1) var(--d,0s) both,glow 2.6s ease-in-out infinite}
+/* Sensei paper card mock — what the projector actually shows */
+.paper{background:#fffdf6;border:1.5px solid #d8cdb3;border-radius:22px;padding:44px 48px;
+ box-shadow:0 40px 100px rgba(0,0,0,.6);color:#29261b;text-align:left}
+.paper .pt{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:52px;font-weight:700;color:#0f0d0a;line-height:1.1}
+.paper .pm{font-family:"Noto Sans Mono CJK TC",monospace;font-size:19px;letter-spacing:.18em;text-transform:uppercase;color:#7a6a52}
+.pcard{background:#fffdf6;border:1px solid #d8cdb3;border-radius:12px;padding:22px 24px;border-top:4px solid var(--ac,#D97757)}
+.pcard .n{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:34px;font-weight:700;color:#0f0d0a;white-space:nowrap}
+.pcard .d{font-family:"Noto Sans Mono CJK TC",monospace;font-size:18px;color:#7a6a52;margin-top:8px;white-space:nowrap}
+
+.pipe{display:flex;align-items:center;gap:26px;margin-top:58px}
+.nd{width:300px;padding:32px 26px;text-align:center;border-radius:22px;
+ background:rgba(16,28,46,.88);border:1.5px solid rgba(45,212,191,.30)}
+.ni{font-size:56px;line-height:1}
+.nn{font-size:34px;font-weight:800;margin-top:14px;color:#f4f8ff;white-space:nowrap}
+.nm{font-family:"Noto Sans Mono CJK TC",monospace;font-size:18px;color:#6fe3d2;margin-top:10px;letter-spacing:.06em}
+.wire{width:74px;height:6px;border-radius:3px;background:rgba(45,212,191,.18);position:relative;overflow:hidden}
+.wire i{position:absolute;inset:0;width:40%;border-radius:3px;background:linear-gradient(90deg,transparent,#2dd4bf,transparent);
+ animation:flow 1.9s linear infinite;animation-delay:var(--wd,0s)}
+@keyframes flow{from{transform:translateX(-100%)}to{transform:translateX(280%)}}
+.encl{margin-top:44px;padding:20px 46px;border-radius:999px;font-size:31px;font-weight:700;white-space:nowrap;
+ background:rgba(74,124,89,.16);border:1.5px solid rgba(74,124,89,.55);color:#9fe0b4}
+
+</style></head>
+<body>
+<div class="bg"></div><div class="aur a"></div><div class="aur b"></div><div class="grid"></div>
+
+<div class="stage" style="z-index:2">
+
+ <div class="kicker in" style="--d:.15s">THE PIPELINE</div>
+ <div class="h2 in" style="--d:.45s;margin-top:22px;font-size:64px">一秒之內，從聲音到版面</div>
+ <div class="pipe">
+   <div class="nd in" style="--d:.9s"><div class="ni">🎤</div><div class="nn">講課語音</div><div class="nm">16 kHz mono</div></div>
+   <div class="wire fadein" style="--d:1.2s"><i style="--wd:0s"></i></div>
+   <div class="nd in" style="--d:1.45s"><div class="ni">📝</div><div class="nn">Whisper</div><div class="nm">large-v3 · 3 GB</div></div>
+   <div class="wire fadein" style="--d:1.75s"><i style="--wd:.5s"></i></div>
+   <div class="nd in" style="--d:2.0s"><div class="ni">🧠</div><div class="nn">Gemma 4</div><div class="nm">e2b · 7 GB</div></div>
+   <div class="wire fadein" style="--d:2.3s"><i style="--wd:1s"></i></div>
+   <div class="nd in" style="--d:2.55s"><div class="ni">📇</div><div class="nn">結構化卡片</div><div class="nm">/display</div></div>
+ </div>
+ <div class="encl in" style="--d:3.2s">● &nbsp;以上每一步，都跑在老師這台筆電裡</div>
+
+</div>
+<div class="vig" style="z-index:3"></div>
+
+</body></html>
