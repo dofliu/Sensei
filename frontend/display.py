@@ -24,12 +24,12 @@ Why SSE instead of the original 1 s polling (PROPOSAL B4)
 
 import asyncio
 import json
-from pathlib import Path
 
 import gradio as gr
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
+from core.session import latest_card
 from frontend.renderers import CURRENT_THEME, _theme, render_html
 
 
@@ -46,11 +46,6 @@ RENDER_CACHE_MAX = 64
 # ────────────────────────────────────────────────────────────────────
 
 _render_cache: dict[tuple, str] = {}
-
-
-def _latest_entry(history_dir: Path) -> Path | None:
-    entries = sorted(history_dir.glob("*.json"), reverse=True)
-    return entries[0] if entries else None
 
 
 def _resolve_card(payload: dict, target: str) -> tuple[dict, str]:
@@ -81,8 +76,12 @@ def _render_cached(key: tuple, data: dict) -> str:
     return html
 
 
-def _display_state(history_dir: Path, get_lang) -> tuple[dict, str]:
+def _display_state(get_history_dir, get_lang) -> tuple[dict, str]:
     """Build the JSON the projector page consumes.
+
+    `get_history_dir` is re-evaluated on every tick so starting a lecture
+    (PROPOSAL B3) redirects the projector to that session's directory without
+    restarting the stream.
 
     Returns (state, change_key). `change_key` folds in everything that should
     trigger a push (card id, language, theme, file mtime) while `state["id"]`
@@ -91,7 +90,7 @@ def _display_state(history_dir: Path, get_lang) -> tuple[dict, str]:
     t = _theme()
     theme_name = CURRENT_THEME["name"]
     base = {"bg": t["display_bg"], "fg": t["fg"]}
-    p = _latest_entry(history_dir)
+    p = latest_card(get_history_dir())
     if p is None:
         return {"id": "", "html": "", **base}, f"|{theme_name}"
     try:
@@ -103,17 +102,18 @@ def _display_state(history_dir: Path, get_lang) -> tuple[dict, str]:
     target = get_lang()
     data, cache_key = _resolve_card(payload, target)
     card_id = p.stem + cache_key
-    html = _render_cached((p.stem, cache_key, theme_name, mtime), data)
+    # Full path in the cache key: two lectures can hold the same card stem.
+    html = _render_cached((str(p), cache_key, theme_name, mtime), data)
     return {"id": card_id, "html": html, **base}, f"{card_id}|{theme_name}|{mtime}"
 
 
-async def event_stream(history_dir: Path, get_lang):
+async def event_stream(get_history_dir, get_lang):
     """SSE body: emit the current state immediately, then only on change.
     Keepalive comments keep proxies from closing an idle stream."""
     last_key = None
     idle = 0.0
     while True:
-        state, key = _display_state(history_dir, get_lang)
+        state, key = _display_state(get_history_dir, get_lang)
         if key != last_key:
             last_key = key
             idle = 0.0
@@ -265,10 +265,11 @@ startSSE();
 """
 
 
-def build_fastapi_app(gradio_app, history_dir: Path, get_lang,
+def build_fastapi_app(gradio_app, get_history_dir, get_lang,
                       theme=None, css: str | None = None) -> FastAPI:
     """把 Gradio 應用 mount 到 FastAPI 上，並加上 /display 三條路由。
-    gradio_app: the gr.Blocks instance; history_dir: where cards are saved;
+    gradio_app: the gr.Blocks instance; get_history_dir: zero-arg callable
+    returning the directory the current lecture writes cards to;
     get_lang: zero-arg callable returning the current card language code;
     theme / css: forwarded to gr.mount_gradio_app (Gradio 6 moved them off
     the Blocks constructor)."""
@@ -280,13 +281,13 @@ def build_fastapi_app(gradio_app, history_dir: Path, get_lang,
 
     @fastapi_app.get("/display/data")
     async def display_data():
-        state, _ = _display_state(history_dir, get_lang)
+        state, _ = _display_state(get_history_dir, get_lang)
         return JSONResponse(state)
 
     @fastapi_app.get("/display/events")
     async def display_events():
         return StreamingResponse(
-            event_stream(history_dir, get_lang),
+            event_stream(get_history_dir, get_lang),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )

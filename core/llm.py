@@ -61,6 +61,41 @@ TOOL_DESCRIPTIONS = {
     "quiz_card":         "當老師想做隨堂測驗 / 形成性檢核 / 4 選 1 選擇題時呼叫（例：「來考一題」、「快問快答」、「下列哪個是…」、明確口述一個帶選項的問句）。",
 }
 
+# The 8th tool (PROPOSAL B1). Not a template: it is how the model says "this
+# utterance has no structure worth projecting" — chit-chat, roll call, a
+# transition, thinking out loud. Only offered in continuous-listening mode;
+# a deliberate F8 press always produces a card.
+NO_CARD_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "no_card",
+        "description": (
+            "當老師這段話沒有可視覺化的結構時呼叫（例：閒聊、點名、「我們繼續」、"
+            "「大家有問題嗎」、重複剛剛講過的內容、單純的過場或口頭禪）。"
+            "寧可跳過也不要硬湊一張卡片 —— 投影機一直換卡片，學生會分心。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "極短的理由（最多 12 字），例如「閒聊」「過場」「重複內容」。",
+                },
+            },
+            "required": ["reason"],
+        },
+    },
+}
+
+# Appended to SYSTEM_TOOLS_PROMPT only when no_card is on the table, so the
+# manual path's prompt is byte-identical to what it was before B1.
+NO_CARD_RULE = (
+    "\n8. 只有在這段話確實有可視覺化結構（並列項目 / 兩者比較 / 步驟流程 / "
+    "分類層級 / SWOT / 金字塔 / 測驗題）時才呼叫模板工具；"
+    "否則呼叫 `no_card`。這是連續聆聽模式，老師整堂課都在講話，"
+    "**大部分句子都應該是 `no_card`**。"
+)
+
 SYSTEM_TOOLS_PROMPT = (
     "你是課堂視覺化助教。請根據老師剛說的話，呼叫**剛好一個**工具來把內容結構化。\n"
     "重要規則：\n"
@@ -142,9 +177,11 @@ class SenseiLLM:
         self.prompt_template = PROMPT_PATH.read_text(encoding="utf-8")
         self.extend_template = EXTEND_PROMPT_PATH.read_text(encoding="utf-8")
         self._tools = _build_tools()
+        # Continuous listening offers the same tools plus the skip gate.
+        self._tools_gated = self._tools + [NO_CARD_TOOL]
         print(
             f"[Sensei LLM] Ready · backend=Ollama · model={config.MODEL_ID}"
-            f" · tools={len(self._tools)}"
+            f" · tools={len(self._tools)} (+no_card gate)"
         )
 
         # Card language for *generation* (zh | en). Distinct from translate(),
@@ -179,7 +216,8 @@ class SenseiLLM:
     # ──────────────────────────────────────────────
     # Public API
     # ──────────────────────────────────────────────
-    def structurize(self, text: str, template_hint: str | None = None) -> dict:
+    def structurize(self, text: str, template_hint: str | None = None,
+                    allow_no_card: bool = False) -> dict:
         """
         Convert spoken text → schema-validated visualization JSON.
 
@@ -192,6 +230,10 @@ class SenseiLLM:
         the tool-call wire format.
 
         Optional `template_hint` forces a specific tool (operator override).
+        `allow_no_card` (continuous listening, PROPOSAL B1) adds the no_card
+        tool so the model can say "this sentence is not worth projecting";
+        the caller then gets {"template": "no_card", "reason": ...}. It is a
+        decision, not a miss, so it never falls through to JSON mode.
         Returns dict with key "template" identifying which schema was used.
         On failure, returns {"template": "raw", ...}.
         """
@@ -200,7 +242,13 @@ class SenseiLLM:
             template_hint = None
 
         # 1. Tool-calling path
-        result = self._structurize_via_tools(text, template_hint=template_hint)
+        result = self._structurize_via_tools(
+            text, template_hint=template_hint, allow_no_card=allow_no_card
+        )
+        if result.get("template") == "no_card":
+            print(f"[Sensei LLM] path=tools no_card ({result.get('reason', '')})", flush=True)
+            result["_path"] = "tools"
+            return result
         if result.get("template") not in ("raw", None):
             print(f"[Sensei LLM] path=tools template={result.get('template')}", flush=True)
             result["_path"] = "tools"
@@ -218,22 +266,30 @@ class SenseiLLM:
         print(f"[Sensei LLM] path={result['_path']} template={result.get('template')}", flush=True)
         return result
 
-    def _structurize_via_tools(self, text: str, template_hint: str | None = None) -> dict:
+    def _structurize_via_tools(self, text: str, template_hint: str | None = None,
+                               allow_no_card: bool = False) -> dict:
         """Native function-calling path. Returns {'template': 'raw', ...} on miss."""
         # When a hint is given, hand the model only that one tool — forces its
         # hand without relying on tool_choice (not all Ollama versions support).
+        # An explicit hint always wins over the gate: the operator asked for a
+        # card, so no_card is not on the table.
         if template_hint:
             tools = [t for t in self._tools if t["function"]["name"] == template_hint]
             if not tools:
                 tools = self._tools
+        elif allow_no_card:
+            tools = self._tools_gated
         else:
             tools = self._tools
+        system = SYSTEM_TOOLS_PROMPT
+        if tools is self._tools_gated:
+            system += NO_CARD_RULE
 
         try:
             response = self.client.chat(
                 model=self.config.MODEL_ID,
                 messages=[
-                    {"role": "system", "content": SYSTEM_TOOLS_PROMPT + "\n8. " + self._lang_directive()},
+                    {"role": "system", "content": system + "\n9. " + self._lang_directive()},
                     {"role": "user",   "content": text},
                 ],
                 tools=tools,
@@ -263,6 +319,10 @@ class SenseiLLM:
                 return {"template": "raw", "_error": f"args_parse:{e}"}
         if not isinstance(args, dict):
             return {"template": "raw", "_error": "args_not_dict"}
+
+        if template_name == "no_card":
+            reason = args.get("reason") or ""
+            return {"template": "no_card", "reason": str(reason)[:24]}
 
         schema = TEMPLATE_REGISTRY.get(template_name)
         if not schema:

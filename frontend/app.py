@@ -17,6 +17,7 @@ text (for testing). Every card is saved to history/ and pushed to /display.
 
 import json
 import sys
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -33,12 +34,14 @@ except Exception:
 import gradio as gr
 import uvicorn
 
-from core.live_mic import LiveMicCapture
-from core.pipeline import SenseiPipeline
+from core import session
+from core.live_mic import ContinuousListener, LiveMicCapture
+from core.pipeline import GATE_MIN_CONTENT, SenseiPipeline
 from core.glossary import list_glossaries
 from frontend.renderers import THEMES, CURRENT_THEME, render_html
 from frontend.i18n import CURRENT_UI_LANG, T, _list_ui_languages
 from frontend.display import build_fastapi_app
+from frontend.handout import build_handout
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -80,6 +83,23 @@ def _list_themes() -> list:
 
 HISTORY_DIR = Path(__file__).parent.parent / "history"
 HISTORY_DIR.mkdir(exist_ok=True)
+
+
+def _history_dir() -> Path:
+    """Where cards are written and read right now (PROPOSAL B3).
+
+    The active lecture's directory once the teacher presses "start lecture",
+    the history root otherwise. Everything that used to touch HISTORY_DIR
+    directly goes through here so /display, the history dropdown, "extend"
+    and the summary all stay inside one lecture.
+    """
+    return session.current_dir(HISTORY_DIR)
+
+
+def _cards(newest_first: bool = True) -> list[Path]:
+    """Card JSONs of the current lecture; session metadata excluded."""
+    files = session.card_files(_history_dir())
+    return list(reversed(files)) if newest_first else files
 
 LATEST_SENTINEL = "__latest__"
 TEMPLATE_HINT_AUTO = "__auto__"
@@ -172,7 +192,7 @@ def _history_label(p: Path) -> str:
 
 def _list_history_choices() -> list:
     """最新在前；choices = [(label, value)]，value 是 JSON 檔絕對路徑。"""
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     return [(_history_label(p), str(p)) for p in entries]
 
 
@@ -187,7 +207,7 @@ def _resolve_base(source_value: str):
     回傳 (json 檔路徑, data dict)；若找不到回傳 None。
     """
     if source_value == LATEST_SENTINEL:
-        entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+        entries = _cards()
         if not entries:
             return None
         p = entries[0]
@@ -222,12 +242,13 @@ def _save_to_history(
         payload["extends_from"] = extends_from
     if is_summary:
         payload["is_summary"] = True
-    json_path = HISTORY_DIR / f"{base}.json"
+    out_dir = _history_dir()
+    json_path = out_dir / f"{base}.json"
     n = 1
     while json_path.exists():
         # Two cards within the same second must not overwrite each other.
         n += 1
-        json_path = HISTORY_DIR / f"{base}_{n}.json"
+        json_path = out_dir / f"{base}_{n}.json"
     base = json_path.stem
     json_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -241,7 +262,7 @@ def _save_to_history(
         f"{render_html(data)}"
         "</body>"
     )
-    (HISTORY_DIR / f"{base}.html").write_text(standalone, encoding="utf-8")
+    (out_dir / f"{base}.html").write_text(standalone, encoding="utf-8")
     return json_path
 
 
@@ -301,7 +322,7 @@ def handle_theme_change(theme_name: str):
     """切主題：套用後立刻重新渲染最新一張卡片到操作畫面；/display 下次輪詢時自動換色。"""
     if theme_name in THEMES:
         CURRENT_THEME["name"] = theme_name
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     if not entries:
         return ""
     try:
@@ -316,7 +337,7 @@ def update_suggestions_after_gen():
     """生卡之後跑：呼叫 LLM 出 3 個下一步建議，更新 3 顆按鈕的 label 與可見性。
     用 .then() 鏈在 generate handler 之後，所以**不阻塞**卡片渲染 — 卡片先出現、建議再淡入。"""
     print("[Sensei] update_suggestions_after_gen fired", flush=True)
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     if not entries:
         print("[Sensei]   no history entries", flush=True)
         return tuple(gr.update(visible=False) for _ in range(3))
@@ -375,7 +396,13 @@ def handle_suggestion_chain(btn_value: str):
 def handle_summarize_today():
     """整理今日所有歷史紀錄成一張 enumeration_cards 總結卡。"""
     today = datetime.now().strftime("%Y%m%d")
-    files = sorted(HISTORY_DIR.glob(f"{today}_*.json"))
+    active = session.current()
+    if active is not None:
+        # A lecture directory holds exactly one lecture — no date filter needed.
+        files = session.card_files(active.dir)
+        today = active.date
+    else:
+        files = sorted(HISTORY_DIR.glob(f"{today}_*.json"))
     if not files:
         return T("err_no_today"), "{}", ""
 
@@ -405,6 +432,228 @@ def handle_summarize_today():
     return summary_transcript, json.dumps(result, ensure_ascii=False, indent=2), render_html(display_data)
 
 
+# ────────────────────────────────────────────────────────────────────
+# Continuous listening (PROPOSAL B1)
+# ────────────────────────────────────────────────────────────────────
+# The listener's worker thread produces cards on its own; /display picks them
+# up over SSE without anyone touching the console. What the console adds is
+# the part students must NOT see: which utterances were skipped and why
+# (PROPOSAL §3 Q4). A gr.Timer polls this log while listening.
+
+CONTINUOUS_LOG_MAX = 10
+CONTINUOUS_LOG: deque = deque(maxlen=CONTINUOUS_LOG_MAX)
+# Whole-lecture tallies; CONTINUOUS_LOG only keeps the last few lines.
+CONTINUOUS_COUNTS = {"cards": 0, "skipped": 0}
+
+GATE_LABELS = {
+    "card":        "gate_card",
+    "no-card":     "gate_no_card",
+    "too-short":   "gate_too_short",
+    "quiz-phrase": "gate_quiz",
+    "operator":    "gate_card",
+    "raw":         "gate_card",
+    "error":       "gate_error",
+}
+
+
+def _log_utterance(gate: str, transcript: str, note: str = "") -> None:
+    CONTINUOUS_LOG.appendleft((
+        datetime.now().strftime("%H:%M:%S"), gate, (transcript or "").strip(), note,
+    ))
+
+
+def _log_skipped(transcript: str, gate: str, reason: str) -> None:
+    """Append the skip to skipped.jsonl in the lecture directory.
+
+    Not a card, so it never reaches /display — but it is exactly the data the
+    C2 bench needs to answer "how often is the gate wrong?", and it is cheap
+    to write. .jsonl, so session.card_files() ignores it.
+    """
+    line = json.dumps({
+        "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "gate": gate, "reason": reason, "transcript": transcript,
+    }, ensure_ascii=False)
+    try:
+        with (_history_dir() / "skipped.jsonl").open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception as e:
+        print(f"[Sensei] could not log skipped utterance: {e}", flush=True)
+
+
+def _on_continuous_utterance(audio, samplerate: int) -> None:
+    """Runs on the listener's worker thread, one utterance at a time."""
+    try:
+        result = pipeline.process_utterance_audio(audio, sample_rate=samplerate)
+    except Exception as e:
+        print(f"[Sensei] continuous utterance failed: {e}", flush=True)
+        _log_utterance("error", "", str(e)[:60])
+        return
+    transcript = result.pop("_transcript", "")
+    gate = result.get("_gate", "?")
+    if result.get("template") == "no_card":
+        reason = result.get("reason", "")
+        CONTINUOUS_COUNTS["skipped"] += 1
+        _log_skipped(transcript, gate, reason)
+        # The rule layer's reason just restates the label; show the measured
+        # content length instead, which is the number the teacher would tune.
+        note = f"{result.get('_content', 0)} < {GATE_MIN_CONTENT}" if gate == "too-short" else reason
+        _log_utterance(gate, transcript, note)
+        return
+    saved = _save_to_history(result, transcript)
+    _translate_and_persist(result, saved)
+    CONTINUOUS_COUNTS["cards"] += 1
+    _log_utterance(gate, transcript, result.get("template", ""))
+
+
+continuous = ContinuousListener(_on_continuous_utterance)
+
+
+def _continuous_status() -> str:
+    st = continuous.stats
+    if not continuous.running and not any(st.values()):
+        return T("cont_status_idle")
+    key = "cont_status_running" if continuous.running else "cont_status_stopped"
+    return T(key).format(
+        cards=CONTINUOUS_COUNTS["cards"],
+        skipped=CONTINUOUS_COUNTS["skipped"],
+        short=st["too_short"],
+        dropped=st["dropped"],
+    )
+
+
+def _continuous_log_md() -> str:
+    if not CONTINUOUS_LOG:
+        return T("cont_log_empty")
+    lines = [f"**{T('cont_log_title')}**", ""]
+    for ts, gate, text, note in CONTINUOUS_LOG:
+        label = T(GATE_LABELS.get(gate, "gate_card"))
+        mark = "·" if gate in ("no-card", "too-short", "error") else "▸"
+        body = text if len(text) <= 46 else text[:46] + "…"
+        suffix = f" — {note}" if note else ""
+        lines.append(f"<small>`{ts}` {mark} **{label}**{suffix} · {body or '—'}</small><br>")
+    return "\n".join(lines)
+
+
+def handle_continuous_toggle():
+    """開始 / 停止連續聆聽。卡片由 worker 執行緒自己產生並推到 /display；
+    這裡只負責按鈕、狀態與操作端的跳過紀錄。"""
+    if continuous.running:
+        continuous.stop()
+    else:
+        CONTINUOUS_LOG.clear()
+        for k in continuous.stats:
+            continuous.stats[k] = 0
+        for k in CONTINUOUS_COUNTS:
+            CONTINUOUS_COUNTS[k] = 0
+        continuous.start()
+    running = continuous.running
+    return (
+        gr.update(value=T("cont_btn_running") if running else T("cont_btn_idle"),
+                  variant="stop" if running else "secondary"),
+        _continuous_status(),
+        _continuous_log_md(),
+        gr.Timer(active=running),
+    )
+
+
+# The console mirrors /display, but only when the card actually changed —
+# re-rendering the same card every 2 s is what B4 removed from the projector.
+CONTINUOUS_SHOWN = {"stem": ""}
+
+
+def refresh_continuous():
+    """gr.Timer tick while listening: status, skip log, newest card."""
+    status, log = _continuous_status(), _continuous_log_md()
+    entries = _cards()
+    if not entries or entries[0].stem == CONTINUOUS_SHOWN["stem"]:
+        return status, log, gr.update()
+    try:
+        payload = json.loads(entries[0].read_text(encoding="utf-8"))
+        html = render_html(_resolve_payload_for_lang(payload, entries[0]))
+    except Exception as e:
+        print(f"[Sensei] continuous refresh failed: {e}", flush=True)
+        return status, log, gr.update()
+    CONTINUOUS_SHOWN["stem"] = entries[0].stem
+    return status, log, html
+
+
+# ────────────────────────────────────────────────────────────────────
+# Lecture sessions + handout export (PROPOSAL B3)
+# ────────────────────────────────────────────────────────────────────
+
+def _handout_strings() -> dict:
+    """Operator-UI language decides what language the handout is written in."""
+    return {
+        "title":      T("ho_title"),
+        "summary":    T("ho_summary"),
+        "card":       T("ho_card"),
+        "transcript": T("ho_transcript"),
+        "generated":  T("ho_generated"),
+        "cards_n":    T("ho_cards_n"),
+    }
+
+
+def _session_status_md(extra: str = "") -> str:
+    """One markdown line describing where cards are currently going."""
+    active = session.current()
+    if active is None:
+        base = T("session_none")
+    else:
+        base = T("session_active").format(
+            course=active.course, dir=active.dir.name,
+            n=len(session.card_files(active.dir)),
+        )
+    return f"{base}\n\n{extra}" if extra else base
+
+
+def handle_session_toggle(course: str):
+    """開始上課 / 結束這堂課。開課後所有卡片、歷史、總結、/display 都限定在
+    history/<date>_<course>/ 之內。"""
+    if session.current() is not None:
+        ended = session.end()
+        status = _session_status_md(
+            T("session_ended").format(course=ended.course) if ended else ""
+        )
+    elif not (course or "").strip():
+        return (
+            gr.update(),
+            _session_status_md(T("err_no_course")),
+            *refresh_dropdowns(),
+        )
+    else:
+        session.start(course)
+        status = _session_status_md()
+    label = T("session_end_btn") if session.current() else T("session_start_btn")
+    return (
+        gr.update(value=label,
+                  variant="stop" if session.current() else "primary"),
+        status,
+        *refresh_dropdowns(),
+    )
+
+
+def handle_export_handout():
+    """把目前這堂課（沒開課就是 history/ 根目錄）輸出成一份 handout.html。"""
+    active = session.current()
+    out_dir = _history_dir()
+    try:
+        path = build_handout(
+            out_dir,
+            course=active.course if active else "",
+            date=active.date if active else datetime.now().strftime("%Y%m%d"),
+            strings=_handout_strings(),
+        )
+    except Exception as e:
+        print(f"[Sensei] handout export failed: {e}", flush=True)
+        return gr.update(visible=False), _session_status_md(f"❗ {e}")
+    if path is None:
+        return gr.update(visible=False), _session_status_md(T("err_no_cards"))
+    return (
+        gr.update(value=str(path), visible=True),
+        _session_status_md(T("handout_done").format(path=path)),
+    )
+
+
 def handle_ui_language_change(ui_lang_value: str):
     """切操作介面語言：更新所有 UI 元件 label / value / choices。
     回傳值的順序必須跟 wiring 的 outputs 列表一致。"""
@@ -426,6 +675,12 @@ def handle_ui_language_change(ui_lang_value: str):
         gr.update(label=T("extend_label"),   choices=_list_extend_choices()),    # extend_source
         gr.update(label=T("glossary_label")),                                    # glossary_picker
         gr.update(label=T("lecture_lang_label"), choices=_list_lecture_languages()),  # lecture_lang_picker
+        # Lecture session row
+        gr.update(label=T("course_label"), placeholder=T("course_placeholder")),  # course_name
+        gr.update(value=T("session_end_btn") if session.current() else T("session_start_btn")),
+        gr.update(value=T("handout_btn")),                        # handout_btn
+        gr.update(value=_session_status_md()),                    # session_status
+        gr.update(label=T("handout_file_label")),                 # handout_file
         # Tabs (label = tab title)
         gr.update(label=T("tab_live")),                           # tab_live
         gr.update(label=T("tab_audio")),                          # tab_audio
@@ -435,6 +690,11 @@ def handle_ui_language_change(ui_lang_value: str):
         gr.update(label=T("live_status_label"),
                   value=T("live_status_recording") if live_mic.recording else T("live_status_idle")),
         gr.update(value=T("live_btn_recording") if live_mic.recording else T("live_btn_idle")),
+        # Continuous listening block
+        gr.update(value=T("cont_md")),                            # cont_md
+        gr.update(value=T("cont_btn_running") if continuous.running else T("cont_btn_idle")),
+        gr.update(label=T("cont_status_label"), value=_continuous_status()),
+        gr.update(value=_continuous_log_md()),                    # cont_log
         # Audio tab
         gr.update(label=T("audio_in_label")),
         gr.update(value=T("btn_new_card")),
@@ -466,7 +726,7 @@ def handle_language_change(lang_value: str):
     valid_codes = {"zh"} | set(SenseiLLM_target_codes())
     if lang_value in valid_codes:
         CURRENT_LANG["name"] = lang_value
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     if not entries:
         return ""
     try:
@@ -521,6 +781,15 @@ def handle_live_toggle(hint_value):
     第一次按：開始錄音。第二次按：停止 → ASR → LLM → 渲染。
     回傳 5 個元素：button label / status text / transcript / json / html
     """
+    if continuous.running:
+        # F8 while continuous listening: cut the current utterance now instead
+        # of waiting for the silence hangover (PROPOSAL B1 manual override).
+        continuous.flush_now()
+        return (
+            gr.update(),
+            T("live_status_flushed"),
+            gr.update(), gr.update(), gr.update(),
+        )
     if not live_mic.recording:
         live_mic.start()
         return (
@@ -935,6 +1204,20 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
             scale=2,
         )
 
+    # Lecture session (PROPOSAL B3): one directory per lecture, one handout
+    # per lecture. Without it every course of the day lands in one pile.
+    with gr.Row():
+        course_name = gr.Textbox(
+            label=T("course_label"),
+            placeholder=T("course_placeholder"),
+            lines=1,
+            scale=3,
+        )
+        session_btn = gr.Button(T("session_start_btn"), variant="primary", scale=1)
+        handout_btn = gr.Button(T("handout_btn"), variant="secondary", scale=1)
+    session_status = gr.Markdown(_session_status_md())
+    handout_file = gr.File(label=T("handout_file_label"), visible=False)
+
     with gr.Tabs() as tabs_root:
         with gr.Tab(T("tab_live")) as tab_live:
             live_md = gr.Markdown(T("live_md"))
@@ -950,6 +1233,19 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
                 size="lg",
                 elem_id="sensei-record-btn",
             )
+
+            # Continuous listening (PROPOSAL B1) — press once per lecture.
+            cont_md = gr.Markdown(T("cont_md"))
+            cont_btn = gr.Button(T("cont_btn_idle"), variant="secondary", size="lg")
+            cont_status = gr.Textbox(
+                label=T("cont_status_label"),
+                value=T("cont_status_idle"),
+                interactive=False,
+                lines=1,
+            )
+            cont_log = gr.Markdown(T("cont_log_empty"))
+            # Only ticks while listening; handle_continuous_toggle flips it.
+            cont_timer = gr.Timer(2.0, active=False)
 
         with gr.Tab(T("tab_audio")) as tab_audio:
             audio_in = gr.Audio(
@@ -1051,6 +1347,18 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
     )
     history_refresh.click(refresh_dropdowns, None, dropdown_targets)
 
+    cont_btn.click(
+        handle_continuous_toggle, None,
+        [cont_btn, cont_status, cont_log, cont_timer],
+    )
+    cont_timer.tick(refresh_continuous, None, [cont_status, cont_log, html_out])
+
+    session_btn.click(
+        handle_session_toggle, course_name,
+        [session_btn, session_status] + dropdown_targets,
+    )
+    handout_btn.click(handle_export_handout, None, [handout_file, session_status])
+
     theme_picker.change(handle_theme_change, theme_picker, html_out)
     glossary_picker.change(handle_glossary_change, glossary_picker, None)
     lecture_lang_picker.change(handle_lecture_language_change, lecture_lang_picker, None)
@@ -1061,8 +1369,10 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
         header_md, live_md, history_md, suggestions_md,
         ui_language_picker, theme_picker, language_picker, template_hint, extend_source,
         glossary_picker, lecture_lang_picker,
+        course_name, session_btn, handout_btn, session_status, handout_file,
         tab_live, tab_audio, tab_text, tab_history,
         live_status, live_btn,
+        cont_md, cont_btn, cont_status, cont_log,
         audio_in, audio_btn, audio_extend_btn,
         text_in, text_btn, text_extend_btn,
         history_dropdown, history_refresh,
@@ -1078,7 +1388,7 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
 
 if __name__ == "__main__":
     fastapi_app = build_fastapi_app(
-        app, HISTORY_DIR, _lang, theme=SENSEI_THEME, css=SENSEI_CSS,
+        app, _history_dir, _lang, theme=SENSEI_THEME, css=SENSEI_CSS,
     )
     print()
     print("=" * 60)

@@ -4,6 +4,7 @@ Sensei · End-to-end Pipeline
 audio (file or array) ──► ASR ──► text ──► LLM ──► structured JSON
 """
 
+import re
 from pathlib import Path
 
 from .asr import SenseiASR
@@ -25,6 +26,33 @@ QUIZ_TRIGGER_PHRASES = (
     "來個 quiz", "來個小考", "來個小測",
     "quick check", "quick quiz", "pop quiz",
 )
+
+
+# ── Continuous-listening gate (PROPOSAL B1) ─────────────────────────
+# Two layers. This is the rule layer, which costs nothing; the model layer is
+# the no_card tool in core/llm.py. Without a gate every sentence becomes a
+# card and the projector strobes.
+#
+# These two numbers are the ones to tune after a real lecture. They live here,
+# together, on purpose — do not scatter them into call sites.
+GATE_MIN_CONTENT = 15    # below this "content length", skip without asking the LLM
+LATIN_WORD_WEIGHT = 2    # one English word ≈ two Chinese characters of content
+
+_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_LATIN_WORD = re.compile(r"[A-Za-z0-9]+")
+
+
+def content_length(text: str) -> int:
+    """Rough "how much was actually said", comparable across zh and en.
+
+    Chinese characters count 1 each; a run of Latin letters/digits counts
+    LATIN_WORD_WEIGHT, because 15 Chinese characters and 15 English words are
+    not remotely the same amount of lecture.
+    """
+    if not text:
+        return 0
+    return (len(_CJK.findall(text))
+            + LATIN_WORD_WEIGHT * len(_LATIN_WORD.findall(text)))
 
 
 def _detect_quiz_trigger(text: str) -> bool:
@@ -80,6 +108,55 @@ class SenseiPipeline:
         """Bypass ASR — for testing without microphone."""
         hint = self._resolve_hint(text, template_hint)
         result = self.llm.structurize(text, template_hint=hint)
+        result["_transcript"] = text
+        return result
+
+    # ── Continuous listening (PROPOSAL B1) ─────────────────────────────
+    def process_utterance_audio(self, audio, sample_rate: int = 16000,
+                                template_hint: str | None = None) -> dict:
+        """One VAD-segmented float32 mono buffer → card or recorded skip.
+        This is what the continuous listener's worker calls."""
+        text = self.asr.transcribe_array(audio, sample_rate=sample_rate)
+        print(f"[Pipeline] Utterance: {text}", flush=True)
+        return self.process_utterance(text, template_hint=template_hint)
+
+    def process_utterance(self, text: str, template_hint: str | None = None) -> dict:
+        """One VAD-segmented utterance → a card, or a recorded skip.
+
+        Same as process_text but with the two-layer gate in front. The result
+        always carries `_gate` so history (and the C2 bench) can answer
+        "how often did we skip, and who decided" without re-running anything.
+
+        `_gate` values:
+          quiz-phrase  the teacher said a wake phrase — always a card
+          operator     an explicit template was picked in the UI
+          too-short    rule layer skipped it, no LLM call
+          no-card      the model chose the no_card tool
+          card         the model produced a card
+          raw          all four output layers missed (still shown, degraded)
+        """
+        text = (text or "").strip()
+        hint = self._resolve_hint(text, template_hint)
+        if hint is not None:
+            gate = "quiz-phrase" if template_hint is None else "operator"
+            result = self.llm.structurize(text, template_hint=hint)
+            result["_gate"] = gate
+            result["_transcript"] = text
+            return result
+
+        n = content_length(text)
+        if n < GATE_MIN_CONTENT:
+            print(f"[Pipeline] gate: skipped (content={n} < {GATE_MIN_CONTENT}) {text!r}", flush=True)
+            return {"template": "no_card", "reason": "too short",
+                    "_gate": "too-short", "_content": n, "_transcript": text}
+
+        result = self.llm.structurize(text, allow_no_card=True)
+        if result.get("template") == "no_card":
+            print(f"[Pipeline] gate: model skipped ({result.get('reason', '')}) {text!r}", flush=True)
+            result["_gate"] = "no-card"
+        else:
+            result["_gate"] = "raw" if result.get("template") == "raw" else "card"
+        result["_content"] = n
         result["_transcript"] = text
         return result
 

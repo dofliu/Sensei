@@ -16,23 +16,28 @@ Roadmap, tech-debt list and open decisions live in [PROJECT_ENHANCEMENT_PROPOSAL
 
 ---
 
-## 1. Current status (as of 2026-09-02)
+## 1. Current status (as of 2026-09-03)
 
 ### Shipped in v1 (hackathon, May 2026) ✅
 - `core/asr.py` Faster-Whisper large-v3; `core/llm.py` Gemma 4 e2b via Ollama with native tool calling → JSON-mode fallback → Pydantic → lenient salvage; `core/templates.py` 7 schemas; `core/pipeline.py` glue + `QUIZ_TRIGGER_PHRASES` spoken trigger.
 - Gradio operator console with live mic (F8 / Ctrl+Space toggle), audio / text input, history, extend-last-card, today's summary, next-step suggestions, 3 themes, 8-language card translation, zh/en operator UI.
 - `/display` projector page (paper editorial), `dry_run.ps1` 9-step preflight.
 
-### Shipped in v2 so far (Phase A + first half of Phase B, 2026-09-02) ✅
+### Shipped in v2 so far (Phase A + **all of Phase B**, 2026-09-02 / 09-03) ✅
 - **B5** `frontend/app.py` split into `renderers.py` / `i18n.py` / `display.py` (move-only).
 - **B4** `/display` pushes over Server-Sent Events with a per-(card, language, theme) render cache; 1 s polling kept as fallback. `theme`/`css` moved to `gr.mount_gradio_app` (Gradio 6). History filenames no longer collide within one second.
 - **B2** ASR glossaries are files in `glossaries/` (`core/glossary.py`); operator UI has "Course glossary" and "Lecture language (zh / en / auto)" dropdowns; English lectures produce English cards directly (`SenseiLLM.output_lang`).
 - **A1 / A3 / A5** docs synced, `requirements.txt` pinned with upper bounds, `start_sensei.ps1` one-click launcher.
+- **B3** `core/session.py` — one directory per lecture (`history/<date>_<course>/`); every card, the history dropdown, extend-source, "today's summary" and `/display` are scoped to it. `frontend/handout.py` exports the lecture as a self-contained printable `handout.html`.
+- **B1** `core/live_mic.py::ContinuousListener` — always-on segmentation with a two-layer gate: rule layer (`content_length < 15` skips free) then the 8th tool `no_card`. Single worker, queue drops the oldest past 2. `_gate` on every card, skips appended to `skipped.jsonl`. F8 while listening = cut now. Operator-only skip log (Q4).
+- `bench/segmenter_probe.py`, `dry_run.ps1` step 8 (gate + session + handout, no model loads).
+
+**Nothing in v2 has run on the real rig yet.** Everything above was verified in the Linux sandbox against stubs. `dry_run.ps1` and `start_sensei.ps1` are still unexercised on Windows.
 
 ### Next (in order) ⏳
-1. **B1 Continuous listening** — VAD-segmented always-on mode with a `no_card` gate tool, F8 kept as manual override. Largest usability win; see PROPOSAL §2 B1 for the design and the queue-drop rule.
-2. **B3 Sessions + handout export** — one directory per lecture, `handout.html` for students.
-3. **C2 Evaluation bench** — `bench/utterances.jsonl`, template hit-rate for e2b vs e4b (paper material).
+1. **Real-rig validation** — `.\dry_run.ps1` (expect 9/9), `.\start_sensei.ps1`, then one real lecture start to finish: name the course, start continuous listening, teach, export the handout.
+2. **Tune the B1 constants** from that lecture. They are defaults, not measurements — all of them are named constants at the top of `core/live_mic.py` and `core/pipeline.py`, and `python -m bench.segmenter_probe` shows what a change does. The three questions to answer: too many cards or too few, do cards arrive late (the `dropped` counter), does the skip log show `no_card` refusing things it should have kept.
+3. **C2 Evaluation bench** — `bench/utterances.jsonl`, template hit-rate and gate accuracy for e2b vs e4b (paper material). The `_gate` field and `skipped.jsonl` from a real lecture are the raw data.
 4. C1 student-side quiz answering over LAN — only after checking the classroom Wi-Fi lets phones reach the laptop.
 
 ---
@@ -53,13 +58,15 @@ This section survived the hackathon because it *is* the product, not the pitch. 
 ## 2. Architecture
 
 ```
-🎤 Lecturer speaks
+🎤 Lecturer speaks  (F8 toggle, or continuous listening — core/live_mic.py)
     ↓
 [ core/asr.py ]        Faster-Whisper large-v3 (local, fp16); language + glossary switchable
     ↓ transcript
-[ core/pipeline.py ]   spoken-trigger guard (quiz), hint resolution
+[ core/pipeline.py ]   spoken-trigger guard (quiz), hint resolution,
+                       continuous-mode gate (rule layer → no_card tool)
     ↓
 [ core/llm.py ]        Gemma 4 e2b via Ollama: tools (primary) → format="json" (fallback)
+                       8th tool `no_card`, offered only in continuous mode
     ↓ JSON
 [ core/templates.py ]  Pydantic validation (+ lenient salvage in llm.py)
     ↓ validated dict
@@ -78,24 +85,29 @@ sensei/
 ├── WRITEUP.md · DEMO_SCRIPT.md · DEMO_CHECKLIST.md · UI_migration_proposal.md   ← hackathon archive
 ├── requirements.txt · start_sensei.ps1 · dry_run.ps1 · dry_run_smoke.py
 ├── core/
-│   ├── __init__.py      ← re-exports the public API
+│   ├── __init__.py      ← lazy re-exports (PEP 562) so core.session / core.glossary
+│   │                      import without dragging in faster-whisper
 │   ├── asr.py           ← ASRConfig, SenseiASR (set_language / set_glossary)
 │   ├── glossary.py      ← list_glossaries / load_glossary over glossaries/*.txt
 │   ├── llm.py           ← LLMConfig, SenseiLLM (structurize / extend / translate / summarize / suggest)
 │   ├── templates.py     ← 7 Pydantic schemas + TEMPLATE_REGISTRY
-│   ├── pipeline.py      ← SenseiPipeline (+ set_glossary / set_lecture_language)
-│   └── live_mic.py      ← LiveMicCapture (toggle recording)
+│   ├── pipeline.py      ← SenseiPipeline (+ set_glossary / set_lecture_language / process_utterance)
+│   ├── live_mic.py      ← LiveMicCapture (toggle) + ContinuousListener (B1)
+│   └── session.py       ← lecture directories, card_files / latest_card
 ├── frontend/
 │   ├── app.py           ← Gradio Blocks, handlers, history persistence
 │   ├── renderers.py     ← THEMES, CURRENT_THEME, render_* , render_html
 │   ├── i18n.py          ← UI_TEXTS, T()
-│   └── display.py       ← DISPLAY_HTML, event_stream (SSE), build_fastapi_app
+│   ├── display.py       ← DISPLAY_HTML, event_stream (SSE), build_fastapi_app
+│   └── handout.py       ← build_handout: a lecture directory → handout.html
+├── bench/               ← measurement, not tests: segmenter_probe.py + README
 ├── glossaries/          ← <id>.<lang>.txt; _template.txt; README.md
 ├── prompts/
 │   ├── classifier.txt   ← JSON-mode classifier prompt (fallback path)
 │   └── extender.txt     ← extend-card prompt
 ├── docs/                ← hero image, thumbnail
-└── history/             ← generated cards (git-ignored; contains classroom transcripts)
+└── history/             ← git-ignored; contains classroom transcripts
+    └── <date>_<course>/ ← one lecture: cards + session.json + skipped.jsonl + handout.html
 ```
 
 ### Visualization templates (curated set)
@@ -109,6 +121,8 @@ sensei/
 | `swot` | strengths / weaknesses / opportunities / threats | `SWOT` |
 | `pyramid` | layered linear hierarchy, apex to base | `Pyramid` |
 | `quiz_card` | in-lecture 4-option check; spoken trigger "來考一題" / "quick check" | `QuizCard` |
+
+`no_card` is an **8th tool, not a template**: it has no Pydantic class, is absent from `TEMPLATE_REGISTRY` and `TOOL_DESCRIPTIONS`, and is only handed to the model when `structurize(..., allow_no_card=True)`. A deliberate F8 press never sees it.
 
 Adding a template = Pydantic class → `TEMPLATE_REGISTRY` → `TOOL_DESCRIPTIONS` in `core/llm.py` → example in `prompts/classifier.txt` → renderer in `frontend/renderers.py` + `RENDERERS` → label in `frontend/i18n.py` + `_list_template_hints` → smoke test. One at a time, never in a batch.
 
@@ -130,7 +144,9 @@ Module-level mutable dicts, single teacher, single machine: `CURRENT_THEME` (ren
 | **Curated template vocabulary** | Stable visual identity; picking from a known list is far more reliable than inventing layouts. | Don't let the LLM invent layouts. Fishbone was dropped on purpose (CSS cost vs impact). |
 | **Card text ≥ 24 px, key headings ≥ 36 px** | Projected onto classroom screens; row 4+ cannot read < 20 px. | Don't shrink fonts to fit. Split into two cards or trim wording. |
 | **`/display` = SSE push with polling fallback; render cache keyed by (card, lang, theme, mtime)** | 3000 polls per lecture used to re-render for nothing; SSE keeps the fade contract (`state.id`) unchanged. | Don't remove the polling fallback; don't key the cache without the theme. |
-| **Continuous listening will gate on a `no_card` tool** (B1, planned) | Otherwise every sentence becomes a card and the projector strobes. | When B1 lands, don't remove the gate to "make it feel responsive". |
+| **Continuous listening gates on a `no_card` tool** (B1, shipped) | Otherwise every sentence becomes a card and the projector strobes. | Don't remove the gate to "make it feel responsive"; don't offer `no_card` on the manual F8 path. |
+| **Utterance segmentation is energy-based, Silero runs inside Whisper** | faster-whisper's Silero wrapper is an internal API that has moved between releases; streaming it frame-by-frame would pin Sensei to that shape. `transcribe_array` already passes `vad_filter=True`, so Silero still drops non-speech *inside* each segment. Energy decides where an utterance ends; Silero decides what in it is speech. | Don't rewrite the segmenter onto `faster_whisper.vad` internals. Do tune the named constants at the top of `core/live_mic.py`. |
+| **One directory per lecture** (B3) | Two courses on one day used to merge in "today's summary". `session.card_files()` is the single place that excludes `session.json` — it sorts *after* the date-stamped card names, so a plain reverse glob hands the projector the metadata file. | Don't glob `HISTORY_DIR` directly in `app.py`; go through `_history_dir()` / `_cards()`. |
 | **Traditional Chinese as primary language** | User and target classrooms are Taiwanese. English is a first-class second (B2), not a replacement. | Don't simplify to mainland Chinese. |
 | **HF cache at `D:\hf-cache`, HF mirror `https://hf-mirror.com`** | User's C drive is full; direct CDN was 486 KB/s, mirror ~4 MB/s in Taiwan. | Don't change to `~/.cache`; don't unset `HF_ENDPOINT`. |
 | **License CC-BY 4.0** | Hackathon rule that we keep honouring; changing it would strand the archived submission. | Don't relicense without the user. |
@@ -154,7 +170,15 @@ Ollama models:      gemma4:e2b (default, 7.2 GB) · gemma4:e4b (9.6 GB, fallback
 HF cache:           Systran/faster-whisper-large-v3 (~3 GB)
 ```
 
-Claude Code sessions run in a Linux sandbox **without** GPU, Ollama, faster-whisper or a microphone. What can be verified there: `pyflakes`, rendering all 7 templates through `frontend.renderers`, `core.glossary`, and importing `frontend.app` with `core.pipeline` / `core.live_mic` stubbed to drive `/display/data` and the SSE generator through FastAPI's TestClient. Anything touching Whisper or Gemma 4 must be validated by the user on the real rig with `dry_run.ps1`.
+Claude Code sessions run in a Linux sandbox **without** GPU, Ollama, faster-whisper or a microphone. What can be verified there:
+
+- `pyflakes` (3 pre-existing f-string warnings are expected: `core/llm.py:346`, `dry_run_smoke.py:61,64`)
+- all 7 renderers, `core.glossary`, `core.session`, `frontend.handout` — these import with no model stack at all, which is why `core/__init__.py` is lazy
+- `frontend.app` with `core.pipeline` / `core.live_mic` stubbed, driving `/display/data` and the SSE generator
+- the B1 segmenter for real, by pushing synthetic blocks straight into `ContinuousListener._on_audio` — that is what `bench/segmenter_probe.py` does
+- the B1 gate paths end to end with only `SenseiLLM.structurize` faked
+
+Anything touching Whisper or Gemma 4 — transcription quality, whether `no_card` fires on the right sentences, real latency — must be validated by the user on the real rig with `dry_run.ps1` and a lecture.
 
 ---
 
@@ -183,10 +207,11 @@ Expectations: `core.llm` → `"template": "enumeration_cards"`, ~5 items, `_path
 
 - **Gemma 4 e2b occasionally emits duplicate JSON keys.** `format="json"` enforces validity, not uniqueness; `json.loads` keeps the last value; prompts ask for unique keys. Low priority.
 - **`core/llm.py` line ~286: f-string without placeholders** (pre-existing, harmless; pyflakes warns). Fix only if touching that function anyway.
-- **Live mic is toggle-only** (record → stop → transcribe). Long segments mean long waits. This is what B1 replaces.
-- **No session concept in `history/`**: "today's summary" filters by date string, so two courses on one day merge. B3.
+- **The B1 constants are defaults, not measurements.** Silence hangover 1.2 s, utterance 3–25 s, `GATE_MIN_CONTENT` 15, queue depth 2 — all picked from the proposal, none validated against a real classroom. `python -m bench.segmenter_probe` shows what changing one does.
+- **A fan that starts mid-lecture costs ~30 s.** The noise floor is calibrated on the first 1.5 s and afterwards only creeps up when "speech" is both longer than any sentence and flat. Until it re-learns, the fan produces one forced cut and possibly one junk segment; then it self-heals. Acceptable; revisit only if it actually happens.
+- **Continuous mode and the F8 toggle recorder are mutually exclusive.** While listening, F8 cuts the current utterance instead of starting a recording. Deliberate — two mic streams on one device is worse.
 
-Resolved, do not refile: Gradio 6 `theme`/`css` warning (moved to mount), Lucide icon stub, missing second screen, same-second history overwrite.
+Resolved, do not refile: Gradio 6 `theme`/`css` warning (moved to mount), Lucide icon stub, missing second screen, same-second history overwrite, live-mic-is-toggle-only (B1), no session concept in `history/` (B3).
 
 ---
 
@@ -195,7 +220,7 @@ Resolved, do not refile: Gradio 6 `theme`/`css` warning (moved to mount), Lucide
 | Phase | Items | Status |
 |---|---|---|
 | A · wrap-up | A1 docs sync · A2 hackathon record in README · A3 pinned deps · A4 `history/` git-ignored · A5 launcher | ✅ done 2026-09-02 |
-| B · classroom usability | B5 app.py split ✅ · B4 /display SSE ✅ · B2 glossaries + language ✅ · **B1 continuous listening** ⏳ · **B3 sessions + handout** ⏳ | in progress |
+| B · classroom usability | B5 app.py split ✅ · B4 /display SSE ✅ · B2 glossaries + language ✅ · B1 continuous listening ✅ · B3 sessions + handout ✅ | code complete 2026-09-03; **unvalidated on the real rig** |
 | C · research / extensions | C2 bench · C3 e4b re-evaluation · C1 LAN quiz answering · C5 custom console · C4 whiteboard vision (deferred) | not started |
 
 Decisions the user already made (2026-09-02): B2 before B1; `bench/` allowed (evaluation set, not unit tests, no CI); `no_card` gate decisions shown in the operator UI only; session directories are named with the course.
@@ -204,9 +229,11 @@ Decisions the user already made (2026-09-02): B2 before B1; `bench/` allowed (ev
 
 ## 8. Immediate next tasks
 
-1. **B1 continuous listening** in `core/live_mic.py` + `core/pipeline.py` + operator UI: sounddevice stream → Silero VAD (bundled with faster-whisper) → utterance ≥ 3 s, ≤ 25 s → ASR → rule gate (< 15 chars skip; quiz phrase force) → `no_card` tool → card. Single worker queue, drop oldest when > 2 pending. Log `_gate` in history JSON. F8 stays as manual override.
-2. **B3 sessions**: "Start lecture" (course name once per day) → `history/<date>_<course>/`; summary and export scoped to the session; `handout.html`.
-3. **User validation on the real rig** after each of the above; `dry_run.ps1` must stay green.
+Phase B is code-complete. The next thing is not more code.
+
+1. **Run it on the real rig.** `.\dry_run.ps1` should be 9/9 (step 8 is the new gate / session / handout check and needs no models). Then `.\start_sensei.ps1`, name the course, teach a real lecture with continuous listening on, export the handout.
+2. **Tune from that lecture**, not from a guess. Everything tunable is a named constant in one block at the top of `core/live_mic.py` (silence hangover, utterance length, noise floor, queue depth) and `core/pipeline.py` (`GATE_MIN_CONTENT`). `python -m bench.segmenter_probe` shows the effect of a change without needing a mic.
+3. **Then C2**: turn that lecture's `_gate` fields and `skipped.jsonl` into `bench/utterances.jsonl` and measure e2b vs e4b.
 
 ---
 
@@ -217,7 +244,7 @@ Decisions the user already made (2026-09-02): B2 before B1; `bench/` allowed (ev
 - **No emojis in code**, OK in `print()` and Markdown. Print prefixes: `[Sensei ASR]`, `[Sensei LLM]`, `[Pipeline]`, `[LiveMic]`, `[Sensei]`.
 - **Where things go**: card HTML → `frontend/renderers.py`; UI strings → `frontend/i18n.py`; projector/transport → `frontend/display.py`; Gradio layout and handlers → `frontend/app.py`. Don't grow `app.py` back into a monolith.
 - **PowerShell scripts ASCII-only**; delegate Chinese to a Python helper (see `dry_run.ps1` / `dry_run_smoke.py`).
-- **No unit-test suite, CI, Docker, poetry, mypy, ruff, pre-commit.** `bench/` (labelled utterances + a runner script) is the one allowed exception, because it produces paper data.
+- **No unit-test suite, CI, Docker, poetry, mypy, ruff, pre-commit.** `bench/` is the one allowed exception, because it produces data rather than gating commits — labelled utterances, a runner, and `segmenter_probe.py` (a tuning tool for the B1 constants). Nothing in `bench/` runs automatically.
 - **No async unless the transport needs it** (the SSE generator is the one place).
 - **Don't refactor for "cleanliness"**; refactor only when the next feature needs it, move-only, verified line-by-line.
 - **Don't auto-format existing code** with black/ruff. Touch only what you change.
@@ -230,7 +257,9 @@ Decisions the user already made (2026-09-02): B2 before B1; `bench/` allowed (ev
 - ❌ Don't let the LLM invent layouts. New templates follow the checklist in §2.
 - ❌ Don't ship renderers with text below 24 px (36 px for key headings).
 - ❌ Don't put glossary terms back into Python constants.
-- ❌ Don't remove the `/display` polling fallback or the `no_card` gate (once B1 lands).
+- ❌ Don't remove the `/display` polling fallback or the `no_card` gate.
+- ❌ Don't offer `no_card` on the manual F8 path — a deliberate press must always produce something.
+- ❌ Don't glob `history/` directly in `app.py`; `_history_dir()` / `_cards()` keep a lecture's cards together.
 - ❌ Don't simplify Chinese to mainland conventions.
 - ❌ Don't change default models (`gemma4:e2b`, `large-v3`) without the VRAM math and, ideally, bench data.
 - ❌ Don't write generic abstractions ("BaseLLM", "LLMFactory", "PluginRegistry").
