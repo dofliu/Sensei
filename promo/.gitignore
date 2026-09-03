@@ -1,0 +1,6 @@
+# Render intermediates: per-scene MP4s and check frames. Regenerate with render_scenes.py.
+work/
+
+# Finished video — kept out of git to avoid binary bloat.
+# Distribute via a GitHub Release or a video host and link it from README.md.
+*.mp4

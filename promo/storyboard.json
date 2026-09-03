@@ -1,0 +1,117 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "xfade": 0.6,
+  "scenes": [
+    {
+      "file": "scene01_hook.html",
+      "duration": 9,
+      "transition": "fade"
+    },
+    {
+      "file": "scene02_problem.html",
+      "duration": 9,
+      "transition": "smoothup"
+    },
+    {
+      "file": "scene03_position.html",
+      "duration": 8,
+      "transition": "circleopen"
+    },
+    {
+      "file": "scene04_pipeline.html",
+      "duration": 10,
+      "transition": "smoothleft"
+    },
+    {
+      "file": "scene05_asr.html",
+      "duration": 9,
+      "transition": "fade"
+    },
+    {
+      "file": "scene06_tools.html",
+      "duration": 9,
+      "transition": "circleopen"
+    },
+    {
+      "file": "scene07_layers.html",
+      "duration": 8,
+      "transition": "smoothup"
+    },
+    {
+      "file": "scene08_templates.html",
+      "duration": 9,
+      "transition": "fade"
+    },
+    {
+      "file": "scene09_enum.html",
+      "duration": 8,
+      "transition": "circleopen"
+    },
+    {
+      "file": "scene10_compare.html",
+      "duration": 8,
+      "transition": "fade"
+    },
+    {
+      "file": "scene11_flow.html",
+      "duration": 9,
+      "transition": "smoothleft"
+    },
+    {
+      "file": "scene12_trigger.html",
+      "duration": 9,
+      "transition": "fade"
+    },
+    {
+      "file": "scene13_quiz.html",
+      "duration": 9,
+      "transition": "circleopen"
+    },
+    {
+      "file": "scene14_display.html",
+      "duration": 9,
+      "transition": "fade"
+    },
+    {
+      "file": "scene15_lang.html",
+      "duration": 8,
+      "transition": "fadeblack"
+    },
+    {
+      "file": "scene16_nocloud.html",
+      "duration": 10,
+      "transition": "fade"
+    },
+    {
+      "file": "scene17_why.html",
+      "duration": 10,
+      "transition": "smoothup"
+    },
+    {
+      "file": "scene18_stats.html",
+      "duration": 7,
+      "transition": "fade"
+    },
+    {
+      "file": "scene19_after.html",
+      "duration": 8,
+      "transition": "circleopen"
+    },
+    {
+      "file": "scene20_glossary.html",
+      "duration": 7,
+      "transition": "smoothleft"
+    },
+    {
+      "file": "scene21_stack.html",
+      "duration": 9,
+      "transition": "fade"
+    },
+    {
+      "file": "scene22_cta.html",
+      "duration": 10
+    }
+  ]
+}
