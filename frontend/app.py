@@ -17,6 +17,7 @@ text (for testing). Every card is saved to history/ and pushed to /display.
 
 import json
 import sys
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -34,8 +35,8 @@ import gradio as gr
 import uvicorn
 
 from core import session
-from core.live_mic import LiveMicCapture
-from core.pipeline import SenseiPipeline
+from core.live_mic import ContinuousListener, LiveMicCapture
+from core.pipeline import GATE_MIN_CONTENT, SenseiPipeline
 from core.glossary import list_glossaries
 from frontend.renderers import THEMES, CURRENT_THEME, render_html
 from frontend.i18n import CURRENT_UI_LANG, T, _list_ui_languages
@@ -432,6 +433,151 @@ def handle_summarize_today():
 
 
 # ────────────────────────────────────────────────────────────────────
+# Continuous listening (PROPOSAL B1)
+# ────────────────────────────────────────────────────────────────────
+# The listener's worker thread produces cards on its own; /display picks them
+# up over SSE without anyone touching the console. What the console adds is
+# the part students must NOT see: which utterances were skipped and why
+# (PROPOSAL §3 Q4). A gr.Timer polls this log while listening.
+
+CONTINUOUS_LOG_MAX = 10
+CONTINUOUS_LOG: deque = deque(maxlen=CONTINUOUS_LOG_MAX)
+# Whole-lecture tallies; CONTINUOUS_LOG only keeps the last few lines.
+CONTINUOUS_COUNTS = {"cards": 0, "skipped": 0}
+
+GATE_LABELS = {
+    "card":        "gate_card",
+    "no-card":     "gate_no_card",
+    "too-short":   "gate_too_short",
+    "quiz-phrase": "gate_quiz",
+    "operator":    "gate_card",
+    "raw":         "gate_card",
+    "error":       "gate_error",
+}
+
+
+def _log_utterance(gate: str, transcript: str, note: str = "") -> None:
+    CONTINUOUS_LOG.appendleft((
+        datetime.now().strftime("%H:%M:%S"), gate, (transcript or "").strip(), note,
+    ))
+
+
+def _log_skipped(transcript: str, gate: str, reason: str) -> None:
+    """Append the skip to skipped.jsonl in the lecture directory.
+
+    Not a card, so it never reaches /display — but it is exactly the data the
+    C2 bench needs to answer "how often is the gate wrong?", and it is cheap
+    to write. .jsonl, so session.card_files() ignores it.
+    """
+    line = json.dumps({
+        "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "gate": gate, "reason": reason, "transcript": transcript,
+    }, ensure_ascii=False)
+    try:
+        with (_history_dir() / "skipped.jsonl").open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception as e:
+        print(f"[Sensei] could not log skipped utterance: {e}", flush=True)
+
+
+def _on_continuous_utterance(audio, samplerate: int) -> None:
+    """Runs on the listener's worker thread, one utterance at a time."""
+    try:
+        result = pipeline.process_utterance_audio(audio, sample_rate=samplerate)
+    except Exception as e:
+        print(f"[Sensei] continuous utterance failed: {e}", flush=True)
+        _log_utterance("error", "", str(e)[:60])
+        return
+    transcript = result.pop("_transcript", "")
+    gate = result.get("_gate", "?")
+    if result.get("template") == "no_card":
+        reason = result.get("reason", "")
+        CONTINUOUS_COUNTS["skipped"] += 1
+        _log_skipped(transcript, gate, reason)
+        # The rule layer's reason just restates the label; show the measured
+        # content length instead, which is the number the teacher would tune.
+        note = f"{result.get('_content', 0)} < {GATE_MIN_CONTENT}" if gate == "too-short" else reason
+        _log_utterance(gate, transcript, note)
+        return
+    saved = _save_to_history(result, transcript)
+    _translate_and_persist(result, saved)
+    CONTINUOUS_COUNTS["cards"] += 1
+    _log_utterance(gate, transcript, result.get("template", ""))
+
+
+continuous = ContinuousListener(_on_continuous_utterance)
+
+
+def _continuous_status() -> str:
+    st = continuous.stats
+    if not continuous.running and not any(st.values()):
+        return T("cont_status_idle")
+    key = "cont_status_running" if continuous.running else "cont_status_stopped"
+    return T(key).format(
+        cards=CONTINUOUS_COUNTS["cards"],
+        skipped=CONTINUOUS_COUNTS["skipped"],
+        short=st["too_short"],
+        dropped=st["dropped"],
+    )
+
+
+def _continuous_log_md() -> str:
+    if not CONTINUOUS_LOG:
+        return T("cont_log_empty")
+    lines = [f"**{T('cont_log_title')}**", ""]
+    for ts, gate, text, note in CONTINUOUS_LOG:
+        label = T(GATE_LABELS.get(gate, "gate_card"))
+        mark = "·" if gate in ("no-card", "too-short", "error") else "▸"
+        body = text if len(text) <= 46 else text[:46] + "…"
+        suffix = f" — {note}" if note else ""
+        lines.append(f"<small>`{ts}` {mark} **{label}**{suffix} · {body or '—'}</small><br>")
+    return "\n".join(lines)
+
+
+def handle_continuous_toggle():
+    """開始 / 停止連續聆聽。卡片由 worker 執行緒自己產生並推到 /display；
+    這裡只負責按鈕、狀態與操作端的跳過紀錄。"""
+    if continuous.running:
+        continuous.stop()
+    else:
+        CONTINUOUS_LOG.clear()
+        for k in continuous.stats:
+            continuous.stats[k] = 0
+        for k in CONTINUOUS_COUNTS:
+            CONTINUOUS_COUNTS[k] = 0
+        continuous.start()
+    running = continuous.running
+    return (
+        gr.update(value=T("cont_btn_running") if running else T("cont_btn_idle"),
+                  variant="stop" if running else "secondary"),
+        _continuous_status(),
+        _continuous_log_md(),
+        gr.Timer(active=running),
+    )
+
+
+# The console mirrors /display, but only when the card actually changed —
+# re-rendering the same card every 2 s is what B4 removed from the projector.
+CONTINUOUS_SHOWN = {"stem": ""}
+
+
+def refresh_continuous():
+    """gr.Timer tick while listening: status, skip log, newest card."""
+    status, log = _continuous_status(), _continuous_log_md()
+    entries = _cards()
+    if not entries or entries[0].stem == CONTINUOUS_SHOWN["stem"]:
+        return status, log, gr.update()
+    try:
+        payload = json.loads(entries[0].read_text(encoding="utf-8"))
+        html = render_html(_resolve_payload_for_lang(payload, entries[0]))
+    except Exception as e:
+        print(f"[Sensei] continuous refresh failed: {e}", flush=True)
+        return status, log, gr.update()
+    CONTINUOUS_SHOWN["stem"] = entries[0].stem
+    return status, log, html
+
+
+# ────────────────────────────────────────────────────────────────────
 # Lecture sessions + handout export (PROPOSAL B3)
 # ────────────────────────────────────────────────────────────────────
 
@@ -544,6 +690,11 @@ def handle_ui_language_change(ui_lang_value: str):
         gr.update(label=T("live_status_label"),
                   value=T("live_status_recording") if live_mic.recording else T("live_status_idle")),
         gr.update(value=T("live_btn_recording") if live_mic.recording else T("live_btn_idle")),
+        # Continuous listening block
+        gr.update(value=T("cont_md")),                            # cont_md
+        gr.update(value=T("cont_btn_running") if continuous.running else T("cont_btn_idle")),
+        gr.update(label=T("cont_status_label"), value=_continuous_status()),
+        gr.update(value=_continuous_log_md()),                    # cont_log
         # Audio tab
         gr.update(label=T("audio_in_label")),
         gr.update(value=T("btn_new_card")),
@@ -630,6 +781,15 @@ def handle_live_toggle(hint_value):
     第一次按：開始錄音。第二次按：停止 → ASR → LLM → 渲染。
     回傳 5 個元素：button label / status text / transcript / json / html
     """
+    if continuous.running:
+        # F8 while continuous listening: cut the current utterance now instead
+        # of waiting for the silence hangover (PROPOSAL B1 manual override).
+        continuous.flush_now()
+        return (
+            gr.update(),
+            T("live_status_flushed"),
+            gr.update(), gr.update(), gr.update(),
+        )
     if not live_mic.recording:
         live_mic.start()
         return (
@@ -1074,6 +1234,19 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
                 elem_id="sensei-record-btn",
             )
 
+            # Continuous listening (PROPOSAL B1) — press once per lecture.
+            cont_md = gr.Markdown(T("cont_md"))
+            cont_btn = gr.Button(T("cont_btn_idle"), variant="secondary", size="lg")
+            cont_status = gr.Textbox(
+                label=T("cont_status_label"),
+                value=T("cont_status_idle"),
+                interactive=False,
+                lines=1,
+            )
+            cont_log = gr.Markdown(T("cont_log_empty"))
+            # Only ticks while listening; handle_continuous_toggle flips it.
+            cont_timer = gr.Timer(2.0, active=False)
+
         with gr.Tab(T("tab_audio")) as tab_audio:
             audio_in = gr.Audio(
                 sources=["microphone", "upload"],
@@ -1174,6 +1347,12 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
     )
     history_refresh.click(refresh_dropdowns, None, dropdown_targets)
 
+    cont_btn.click(
+        handle_continuous_toggle, None,
+        [cont_btn, cont_status, cont_log, cont_timer],
+    )
+    cont_timer.tick(refresh_continuous, None, [cont_status, cont_log, html_out])
+
     session_btn.click(
         handle_session_toggle, course_name,
         [session_btn, session_status] + dropdown_targets,
@@ -1193,6 +1372,7 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
         course_name, session_btn, handout_btn, session_status, handout_file,
         tab_live, tab_audio, tab_text, tab_history,
         live_status, live_btn,
+        cont_md, cont_btn, cont_status, cont_log,
         audio_in, audio_btn, audio_extend_btn,
         text_in, text_btn, text_extend_btn,
         history_dropdown, history_refresh,
