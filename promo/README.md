@@ -1,6 +1,11 @@
 # Sensei · 專案介紹影片
 
-3 分鐘完整版介紹影片的原始素材。成品:`sensei_intro.mp4`(1920×1080 / 30 fps / 約 2:59)。
+3 分鐘完整版介紹影片的原始素材。
+
+**成品規格**（實測）:1920×1080 · 30 fps · H.264 · **179.4 秒（2:59.4）** ·
+安靜合成氛圍配樂 **−22.2 LUFS**（刻意壓低，直接疊旁白不會打架）。
+`sensei_intro.mp4` 約 31 MB;`sensei_intro_web.mp4` 是同一支重壓到 25 MB
+的版本，給有上傳大小限制的場合用。
 
 由 `repo-intro-video` skill 產出:22 個 standalone HTML 場景 → 無頭瀏覽器逐格渲染 →
 ffmpeg xfade 轉場串接 + 安靜合成氛圍配樂。
@@ -13,7 +18,8 @@ promo/
 ├── storyboard.json       ← 由 build_scenes.py 產生：每景檔名 / 秒數 / 轉場
 ├── scene01_hook.html …   ← 由 build_scenes.py 產生的 standalone 場景（22 個）
 ├── work/                 ← 渲染中間檔：每景 .mp4 + check_*.png 抽查格
-└── sensei_intro.mp4      ← 成品
+├── sensei_intro.mp4      ← 成品（CRF 19，約 31 MB）
+└── sensei_intro_web.mp4  ← 同一支重壓版（CRF 22，約 25 MB）
 ```
 
 `work/` 與 `*.html` 都是產生物,可以安全刪掉重建。
@@ -47,6 +53,13 @@ python "$skill\scripts\render_scenes.py" storyboard.json --workdir work --only s
 
 ```powershell
 python "$skill\scripts\assemble_video.py" storyboard.json --workdir work --out sensei_intro.mp4 --bed
+```
+
+成品比 30 MB 上傳限制大一點時，重壓一份就好（畫面是平面色塊 + 文字，重壓看不出差別）:
+
+```powershell
+ffmpeg -i sensei_intro.mp4 -c:v libx264 -preset slow -crf 22 -pix_fmt yuv420p `
+       -c:a copy -movflags +faststart sensei_intro_web.mp4
 ```
 
 ### 改長度
