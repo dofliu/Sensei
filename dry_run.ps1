@@ -1,4 +1,4 @@
-# Sensei · Day-6 dry-run rehearsal (ASCII-only)
+# Sensei - preflight check (ASCII-only)
 # ----------------------------------------------
 # Usage:   .\dry_run.ps1
 #
@@ -6,6 +6,8 @@
 # 5.1's system-codepage parsing of .ps1 source never sees non-ASCII bytes.
 #
 # Re-runnable, nothing destructive. ~45-60 s total (Whisper loads in step 7).
+# Steps 1-7 check the models and devices; step 8 checks the B1 gate and the
+# B3 session / handout paths without loading anything.
 
 Set-Location -Path $PSScriptRoot
 
@@ -28,7 +30,7 @@ function Hint([string]$msg) { Write-Host "         $msg" -ForegroundColor DarkGr
 $env:PYTHONIOENCODING = "utf-8"
 
 Write-Host ""
-Write-Host " Sensei dry-run rehearsal " -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host " Sensei preflight " -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host "Working dir: $PSScriptRoot" -ForegroundColor DarkGray
 Write-Host "Start time : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor DarkGray
 
@@ -124,18 +126,34 @@ Step "7. Pipeline smoke: quiz wake-phrase -> expect quiz_card + trigger fired" {
     }
 }
 
-# 8. Manual checklist (no-script, just prints)
-Step "8. Manual pre-shoot checks (script can't verify these for you)" {
+# 8. B1 gate + B3 session / handout (no model loads, fast)
+Step "8. Continuous-listening gate + lecture session + handout export" {
+    $out = python dry_run_smoke.py gate 2>&1 | Out-String
+    if ($LASTEXITCODE -eq 0 -and $out -match "PASS") {
+        Ok "gate thresholds, no_card tool, session dir and handout export"
+        Write-Host ($out -split "`n" | Where-Object { $_ -match "content=" } | Out-String) -ForegroundColor DarkGray
+    } else {
+        Fail "gate / session / handout smoke failed"
+        Write-Host ($out -split "`n" | Select-Object -Last 12 | Out-String) -ForegroundColor DarkGray
+    }
+    Hint "Tune the segmenter separately: python -m bench.segmenter_probe"
+}
+
+# 9. Manual checklist (no-script, just prints)
+Step "9. Manual pre-lecture checks (script can't verify these for you)" {
     $items = @(
-        "Move or clear  history/  so shoot starts with empty card log",
-        "Launch app:    python -m frontend.app",
+        "Launch app:    .\start_sensei.ps1   (or python -m frontend.app)",
         "Open /display: http://localhost:7860/display  ->  F11 fullscreen",
+        "Type the course name and press 'start lecture' BEFORE the first card",
         "Pick theme:    Paper for warm light, Dark for dim room, Light for bright room",
         "Windows Sound -> input device matches the external mic in step 5",
         "Laptop battery 100%, power plugged, sleep + notifications disabled",
         "Speak the quiz wake-phrase INTO YOUR ACTUAL MICROPHONE and confirm Whisper transcribes it cleanly",
-        "Re-record a 30-second test clip with the full Demo A line; confirm latency feels right",
-        "Walk through DEMO_SCRIPT.md A / B / C once end-to-end before rolling tape"
+        "Start continuous listening, talk for two minutes, and watch the skip log:",
+        "   too many cards -> raise GATE_MIN_CONTENT in core/pipeline.py",
+        "   too few cards  -> lower it, or shorten MIN_UTTERANCE_S in core/live_mic.py",
+        "   cards arrive late -> the queue is dropping; check the 'dropped' counter",
+        "After the lecture: press 'export handout' and open the file it hands back"
     )
     foreach ($i in $items) { Hint "[ ] $i" }
 }
@@ -149,8 +167,8 @@ Write-Host "  FAIL: $fail" -ForegroundColor Red
 
 if ($fail -eq 0) {
     Write-Host ""
-    Write-Host "Ready for Day 6 dry-run rehearsal." -ForegroundColor Green
-    Write-Host "Next: python -m frontend.app  ->  walk through DEMO_SCRIPT.md A / B / C live." -ForegroundColor DarkGray
+    Write-Host "Ready to teach." -ForegroundColor Green
+    Write-Host "Next: .\start_sensei.ps1  ->  name the course, start the lecture, start listening." -ForegroundColor DarkGray
     exit 0
 } else {
     Write-Host ""

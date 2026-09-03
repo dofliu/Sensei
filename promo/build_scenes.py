@@ -278,10 +278,12 @@ scene("scene06_tools", "tool calling", 9, TEAL, VIOLET, css="""
 .tl .tn{font-family:"Noto Sans Mono CJK TC",monospace;font-size:23px;color:#a9bdd8;white-space:nowrap}
 .tl.on{background:rgba(45,212,191,.16);border-color:rgba(45,212,191,.75);box-shadow:0 0 46px rgba(45,212,191,.35)}
 .tl.on .tn{color:#7ff0df;font-weight:700}
+.tl.skip{border-style:dashed;border-color:rgba(150,200,255,.30);background:rgba(16,28,46,.55)}
+.tl.skip .tn{color:#7c8ba1}
 .pick{margin-top:44px;font-size:36px;color:rgba(232,238,247,.82)}
 """, body="""
  <div class="kicker in" style="--d:.15s">STEP 2 · 結構判斷</div>
- <div class="h2 in" style="--d:.45s;margin-top:20px;font-size:60px">七個模板，就是七個工具</div>
+ <div class="h2 in" style="--d:.45s;margin-top:20px;font-size:60px">七個模板 ＋ 一個「這句不用出卡」</div>
  <div class="sub in" style="--d:.85s;margin-top:22px;font-size:31px">Gemma 4 用原生 function calling 挑一個工具，把老師的話填進欄位</div>
  <div class="tools">
    <div class="tl in" style="--d:1.35s"><div class="tn">comparison_table</div></div>
@@ -291,6 +293,7 @@ scene("scene06_tools", "tool calling", 9, TEAL, VIOLET, css="""
    <div class="tl in" style="--d:1.65s"><div class="tn">swot</div></div>
    <div class="tl in" style="--d:1.75s"><div class="tn">pyramid</div></div>
    <div class="tl in" style="--d:1.85s"><div class="tn">quiz_card</div></div>
+   <div class="tl skip in" style="--d:1.95s"><div class="tn">no_card</div></div>
  </div>
  <div class="pick in" style="--d:2.7s">模型挑中 <span class="accent">enumeration_cards</span> — 因為這句話在「並列」</div>
 """)
@@ -669,7 +672,7 @@ scene("scene19_after", "課後", 8, VIOLET, PLUM, css="""
      <div class="fd">整堂課的逐字稿<br>收斂成一張總結卡</div></div>
    <div class="ar pop" style="--d:1.95s">→</div>
    <div class="fb in" style="--d:2.2s"><div class="fi">🎓</div><div class="ft">學生講義</div>
-     <div class="fd">丟到教學平台<br>就是結構化筆記</div></div>
+     <div class="fd">一鍵輸出 handout.html<br>丟到教學平台就是筆記</div></div>
  </div>
  <div class="sub in" style="--d:2.9s;margin-top:44px;font-size:30px">
    老師本來就在講的內容，不用再花一個晚上重做一次投影片

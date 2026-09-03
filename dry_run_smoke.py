@@ -8,6 +8,7 @@ Usage:
     python dry_run_smoke.py enum      # LLM-only enumeration_cards smoke
     python dry_run_smoke.py quiz      # full pipeline + spoken-trigger smoke
     python dry_run_smoke.py audio     # list audio input devices
+    python dry_run_smoke.py gate      # B1 gate + B3 session/handout, no models
 
 Exit codes:
     0 = pass
@@ -67,6 +68,69 @@ def smoke_quiz() -> int:
     return 1
 
 
+def smoke_gate() -> int:
+    """B1 rule layer + B3 session/handout. Imports only — no model loads,
+    so this stays fast and still fails loudly if a refactor broke the wiring."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from core.llm import NO_CARD_TOOL, TOOL_DESCRIPTIONS
+    from core.pipeline import GATE_MIN_CONTENT, content_length
+    from core import session
+    from frontend.handout import build_handout
+
+    problems = []
+
+    # The 8th tool must exist and must NOT be one of the seven templates.
+    if NO_CARD_TOOL["function"]["name"] != "no_card":
+        problems.append("no_card tool is not named no_card")
+    if "no_card" in TOOL_DESCRIPTIONS:
+        problems.append("no_card leaked into TOOL_DESCRIPTIONS (it is not a template)")
+
+    # Rule layer: chit-chat below the threshold, real content above it.
+    checks = [
+        ("好，那我們繼續",                                                 False),
+        ("下一頁",                                                         False),
+        ("OK next slide",                                                  False),
+        ("同學，控制不是只有 PID 控制，還有最佳、類神經、非線性、強健控制",  True),
+        ("Control is not only PID, there is also optimal, neural, "
+         "nonlinear and robust control",                                   True),
+    ]
+    for text, should_pass in checks:
+        n = content_length(text)
+        passes = n >= GATE_MIN_CONTENT
+        mark = "pass" if passes else "skip"
+        print(f"  content={n:>3} -> {mark:<4} {text[:44]}")
+        if passes != should_pass:
+            problems.append(f"gate got {mark} for {text[:24]!r} (content={n})")
+
+    # Session + handout, in a throwaway directory.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        s = session.start("dry run", root=root)
+        card = {"template": "enumeration_cards", "title": "控制方法",
+                "subtitle": "", "items": [
+                    {"name": "PID", "icon": "settings", "desc": "常用", "name_en": "", "tag": ""},
+                    {"name": "強健", "icon": "shield", "desc": "抗擾", "name_en": "", "tag": ""}]}
+        (s.dir / "20260101_120000_enumeration_cards.json").write_text(
+            json.dumps({"timestamp": "20260101_120000", "transcript": "測試",
+                        "data": card}, ensure_ascii=False), encoding="utf-8")
+        if [p.name for p in session.card_files(s.dir)] != ["20260101_120000_enumeration_cards.json"]:
+            problems.append("session.card_files did not exclude session.json")
+        out = build_handout(s.dir, course="dry run", date=s.date)
+        session.end()
+        if out is None or not out.exists() or out.stat().st_size < 1000:
+            problems.append("handout.html was not written")
+
+    if problems:
+        for p in problems:
+            print(f"FAIL {p}")
+        return 1
+    print("PASS gate thresholds, no_card tool, session dir and handout export")
+    return 0
+
+
 def smoke_audio() -> int:
     """List input-capable audio devices for eyeballing the right mic."""
     import sounddevice as sd
@@ -88,6 +152,7 @@ COMMANDS = {
     "enum":  smoke_enum,
     "quiz":  smoke_quiz,
     "audio": smoke_audio,
+    "gate":  smoke_gate,
 }
 
 

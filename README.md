@@ -21,19 +21,19 @@
 
 ```mermaid
 flowchart TB
-    A([🎤 Lecturer's voice &nbsp;·&nbsp; 📝 Text input &nbsp;·&nbsp; 📚 Card to extend])
+    A([🎤 Lecturer's voice — continuous or F8 &nbsp;·&nbsp; 📝 Text input &nbsp;·&nbsp; 📚 Card to extend])
     A --> B
 
     subgraph s1 ["━━━ Everything below runs on the teacher's laptop · No cloud · No bills ━━━"]
         direction TB
         B["**Whisper large-v3**<br/>ASR + INITIAL_PROMPT glossary<br/>~3 GB VRAM"]
-        C["**Gemma 4 e2b** via Ollama<br/>native tool calling → JSON-mode fallback<br/>~7 GB VRAM"]
+        C["**Gemma 4 e2b** via Ollama<br/>native tool calling → JSON-mode fallback<br/>`no_card` gate skips the chit-chat<br/>~7 GB VRAM"]
         D["**Pydantic** schema validation<br/>+ lenient salvage<br/>+ optional 8-language translation"]
         B --> C --> D
     end
 
     D --> E["**7 visualization templates**<br/>enumeration · comparison · flow<br/>hierarchy · SWOT · pyramid · quiz"]
-    E --> F["💻 **Operator console**<br/>laptop browser · bilingual UI<br/>F8 hotkey · history · extend · summarize"]
+    E --> F["💻 **Operator console**<br/>laptop browser · bilingual UI<br/>lecture sessions · skip log · handout export"]
     E --> G["🎬 **/display** fullscreen view<br/>projector · paper editorial<br/>auto fade-swap"]
 
     classDef input fill:#f6f1e6,stroke:#D97757,stroke-width:2px,color:#29261b
@@ -46,7 +46,7 @@ flowchart TB
     class F,G output
 ```
 
-Three layers of structured-output guarantee, top to bottom: native function calling → JSON mode → Pydantic with salvage. See [WRITEUP §3](WRITEUP.md#3-architecture) for the full reasoning.
+Four layers of structured-output guarantee, top to bottom: native function calling → JSON mode → Pydantic → lenient salvage. See [WRITEUP §3](WRITEUP.md#3-architecture) for the full reasoning.
 
 ---
 
@@ -94,9 +94,11 @@ Seven visualization templates cover the most common pedagogical speech patterns:
 
 ### Beyond the basics
 
+- **Continuous listening** — press once at the start of the lecture and put the keyboard down. Sensei segments its own utterances (a pause over 1.2 s ends one; under 3 s is discarded) and runs a two-layer gate before anything reaches the projector: a rule layer drops utterances too short to carry structure, and an 8th tool, `no_card`, lets Gemma 4 say "this one is chit-chat". Skipped utterances are listed on the console only — students never see them. F8 stays as the manual override: while listening, it cuts the current utterance immediately instead of waiting for the pause.
+- **Lecture sessions and handout export** — name the course once, and every card of that lecture lands in `history/<date>_<course>/`. One click writes a `handout.html` for that lecture: summary first, then the cards in order, each with the lecturer's own words folded underneath. Self-contained, no JS, prints to PDF from the browser. This is what makes Sensei worth opening after class as well as during it.
 - **Second screen (`/display`)** — a separate fullscreen URL that fades to the latest card the moment it exists (Server-Sent Events, 1 s polling as fallback). Teacher mirrors it to the projector while operating Gradio on the laptop.
 - **Course glossary + lecture language** — pick the Whisper term glossary for today's course (`glossaries/*.txt`, add your own without touching code) and the lecture language (中文 / English / auto). English lectures get English cards directly.
-- **History** — every card auto-saves to `history/` as both `.json` (data + transcript) and `.html` (standalone, screenshot-able).
+- **History** — every card auto-saves as both `.json` (data + transcript + which gate decided it) and `.html` (standalone, screenshot-able), into the active lecture's directory.
 - **Card extension** — the lecturer can say *"oh, also add robust control and gain scheduling"* and click "Extend last card" to append items to an existing card without rebuilding from scratch. Template is locked to the original card's template.
 - **Template hint** — operator can force a specific template (override LLM's auto-pick) when the natural-language signal is ambiguous.
 - **Large-print mode by design** — all card text is ≥24 px, key headings ≥36 px, sized for projector legibility from the back of a classroom.
@@ -156,6 +158,9 @@ python -m core.asr path/to/test.wav
 
 # 4c. Test full pipeline (text mode, no mic)
 python -m core.pipeline "風機監控系統的流程是先量測振動，再特徵抽取，然後分類，最後報警"
+
+# 4d. See how the continuous-listening segmenter behaves (no mic, no models)
+python -m bench.segmenter_probe
 ```
 
 ### 5. Launch Sensei
@@ -194,17 +199,20 @@ sensei/
 │   ├── glossary.py      ← loads glossaries/*.txt into Whisper initial_prompts
 │   ├── llm.py           ← Gemma 4 via Ollama, tool calling + JSON-mode fallback, zh/en output
 │   ├── templates.py     ← 7 visualization schemas (Pydantic)
-│   ├── pipeline.py      ← end-to-end glue + quiz_card spoken-trigger guard
-│   └── live_mic.py      ← server-side microphone capture (F8 toggle)
+│   ├── pipeline.py      ← end-to-end glue + quiz_card spoken-trigger + the no-card gate
+│   ├── live_mic.py      ← F8 toggle capture + continuous listening (VAD-style segmenter)
+│   └── session.py       ← one directory per lecture (history/<date>_<course>/)
 ├── frontend/
 │   ├── app.py           ← Gradio operator console: layout, handlers, history
 │   ├── renderers.py     ← THEMES + 7 HTML renderers (≥24 px / ≥36 px large-print rule)
 │   ├── i18n.py          ← operator-UI strings (zh / en)
-│   └── display.py       ← /display projector page, SSE feed, FastAPI mount
+│   ├── display.py       ← /display projector page, SSE feed, FastAPI mount
+│   └── handout.py       ← a lecture directory → one printable handout.html
 ├── glossaries/          ← one ASR glossary per course (auto_control, machine_learning, wind_energy, general.en)
 ├── prompts/
 │   ├── classifier.txt   ← Gemma 4's instruction (template choice + slot filling)
 │   └── extender.txt     ← prompt for "extend existing card with new content"
+├── bench/               ← measurement, not tests (segmenter tuning probe)
 ├── start_sensei.ps1     ← one-click launcher (Windows)
 ├── dry_run.ps1          ← 9-step preflight check
 ├── PROJECT_ENHANCEMENT_PROPOSAL.md ← post-hackathon roadmap (start here)
