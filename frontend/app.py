@@ -33,12 +33,14 @@ except Exception:
 import gradio as gr
 import uvicorn
 
+from core import session
 from core.live_mic import LiveMicCapture
 from core.pipeline import SenseiPipeline
 from core.glossary import list_glossaries
 from frontend.renderers import THEMES, CURRENT_THEME, render_html
 from frontend.i18n import CURRENT_UI_LANG, T, _list_ui_languages
 from frontend.display import build_fastapi_app
+from frontend.handout import build_handout
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -80,6 +82,23 @@ def _list_themes() -> list:
 
 HISTORY_DIR = Path(__file__).parent.parent / "history"
 HISTORY_DIR.mkdir(exist_ok=True)
+
+
+def _history_dir() -> Path:
+    """Where cards are written and read right now (PROPOSAL B3).
+
+    The active lecture's directory once the teacher presses "start lecture",
+    the history root otherwise. Everything that used to touch HISTORY_DIR
+    directly goes through here so /display, the history dropdown, "extend"
+    and the summary all stay inside one lecture.
+    """
+    return session.current_dir(HISTORY_DIR)
+
+
+def _cards(newest_first: bool = True) -> list[Path]:
+    """Card JSONs of the current lecture; session metadata excluded."""
+    files = session.card_files(_history_dir())
+    return list(reversed(files)) if newest_first else files
 
 LATEST_SENTINEL = "__latest__"
 TEMPLATE_HINT_AUTO = "__auto__"
@@ -172,7 +191,7 @@ def _history_label(p: Path) -> str:
 
 def _list_history_choices() -> list:
     """最新在前；choices = [(label, value)]，value 是 JSON 檔絕對路徑。"""
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     return [(_history_label(p), str(p)) for p in entries]
 
 
@@ -187,7 +206,7 @@ def _resolve_base(source_value: str):
     回傳 (json 檔路徑, data dict)；若找不到回傳 None。
     """
     if source_value == LATEST_SENTINEL:
-        entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+        entries = _cards()
         if not entries:
             return None
         p = entries[0]
@@ -222,12 +241,13 @@ def _save_to_history(
         payload["extends_from"] = extends_from
     if is_summary:
         payload["is_summary"] = True
-    json_path = HISTORY_DIR / f"{base}.json"
+    out_dir = _history_dir()
+    json_path = out_dir / f"{base}.json"
     n = 1
     while json_path.exists():
         # Two cards within the same second must not overwrite each other.
         n += 1
-        json_path = HISTORY_DIR / f"{base}_{n}.json"
+        json_path = out_dir / f"{base}_{n}.json"
     base = json_path.stem
     json_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -241,7 +261,7 @@ def _save_to_history(
         f"{render_html(data)}"
         "</body>"
     )
-    (HISTORY_DIR / f"{base}.html").write_text(standalone, encoding="utf-8")
+    (out_dir / f"{base}.html").write_text(standalone, encoding="utf-8")
     return json_path
 
 
@@ -301,7 +321,7 @@ def handle_theme_change(theme_name: str):
     """切主題：套用後立刻重新渲染最新一張卡片到操作畫面；/display 下次輪詢時自動換色。"""
     if theme_name in THEMES:
         CURRENT_THEME["name"] = theme_name
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     if not entries:
         return ""
     try:
@@ -316,7 +336,7 @@ def update_suggestions_after_gen():
     """生卡之後跑：呼叫 LLM 出 3 個下一步建議，更新 3 顆按鈕的 label 與可見性。
     用 .then() 鏈在 generate handler 之後，所以**不阻塞**卡片渲染 — 卡片先出現、建議再淡入。"""
     print("[Sensei] update_suggestions_after_gen fired", flush=True)
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     if not entries:
         print("[Sensei]   no history entries", flush=True)
         return tuple(gr.update(visible=False) for _ in range(3))
@@ -375,7 +395,13 @@ def handle_suggestion_chain(btn_value: str):
 def handle_summarize_today():
     """整理今日所有歷史紀錄成一張 enumeration_cards 總結卡。"""
     today = datetime.now().strftime("%Y%m%d")
-    files = sorted(HISTORY_DIR.glob(f"{today}_*.json"))
+    active = session.current()
+    if active is not None:
+        # A lecture directory holds exactly one lecture — no date filter needed.
+        files = session.card_files(active.dir)
+        today = active.date
+    else:
+        files = sorted(HISTORY_DIR.glob(f"{today}_*.json"))
     if not files:
         return T("err_no_today"), "{}", ""
 
@@ -405,6 +431,83 @@ def handle_summarize_today():
     return summary_transcript, json.dumps(result, ensure_ascii=False, indent=2), render_html(display_data)
 
 
+# ────────────────────────────────────────────────────────────────────
+# Lecture sessions + handout export (PROPOSAL B3)
+# ────────────────────────────────────────────────────────────────────
+
+def _handout_strings() -> dict:
+    """Operator-UI language decides what language the handout is written in."""
+    return {
+        "title":      T("ho_title"),
+        "summary":    T("ho_summary"),
+        "card":       T("ho_card"),
+        "transcript": T("ho_transcript"),
+        "generated":  T("ho_generated"),
+        "cards_n":    T("ho_cards_n"),
+    }
+
+
+def _session_status_md(extra: str = "") -> str:
+    """One markdown line describing where cards are currently going."""
+    active = session.current()
+    if active is None:
+        base = T("session_none")
+    else:
+        base = T("session_active").format(
+            course=active.course, dir=active.dir.name,
+            n=len(session.card_files(active.dir)),
+        )
+    return f"{base}\n\n{extra}" if extra else base
+
+
+def handle_session_toggle(course: str):
+    """開始上課 / 結束這堂課。開課後所有卡片、歷史、總結、/display 都限定在
+    history/<date>_<course>/ 之內。"""
+    if session.current() is not None:
+        ended = session.end()
+        status = _session_status_md(
+            T("session_ended").format(course=ended.course) if ended else ""
+        )
+    elif not (course or "").strip():
+        return (
+            gr.update(),
+            _session_status_md(T("err_no_course")),
+            *refresh_dropdowns(),
+        )
+    else:
+        session.start(course)
+        status = _session_status_md()
+    label = T("session_end_btn") if session.current() else T("session_start_btn")
+    return (
+        gr.update(value=label,
+                  variant="stop" if session.current() else "primary"),
+        status,
+        *refresh_dropdowns(),
+    )
+
+
+def handle_export_handout():
+    """把目前這堂課（沒開課就是 history/ 根目錄）輸出成一份 handout.html。"""
+    active = session.current()
+    out_dir = _history_dir()
+    try:
+        path = build_handout(
+            out_dir,
+            course=active.course if active else "",
+            date=active.date if active else datetime.now().strftime("%Y%m%d"),
+            strings=_handout_strings(),
+        )
+    except Exception as e:
+        print(f"[Sensei] handout export failed: {e}", flush=True)
+        return gr.update(visible=False), _session_status_md(f"❗ {e}")
+    if path is None:
+        return gr.update(visible=False), _session_status_md(T("err_no_cards"))
+    return (
+        gr.update(value=str(path), visible=True),
+        _session_status_md(T("handout_done").format(path=path)),
+    )
+
+
 def handle_ui_language_change(ui_lang_value: str):
     """切操作介面語言：更新所有 UI 元件 label / value / choices。
     回傳值的順序必須跟 wiring 的 outputs 列表一致。"""
@@ -426,6 +529,12 @@ def handle_ui_language_change(ui_lang_value: str):
         gr.update(label=T("extend_label"),   choices=_list_extend_choices()),    # extend_source
         gr.update(label=T("glossary_label")),                                    # glossary_picker
         gr.update(label=T("lecture_lang_label"), choices=_list_lecture_languages()),  # lecture_lang_picker
+        # Lecture session row
+        gr.update(label=T("course_label"), placeholder=T("course_placeholder")),  # course_name
+        gr.update(value=T("session_end_btn") if session.current() else T("session_start_btn")),
+        gr.update(value=T("handout_btn")),                        # handout_btn
+        gr.update(value=_session_status_md()),                    # session_status
+        gr.update(label=T("handout_file_label")),                 # handout_file
         # Tabs (label = tab title)
         gr.update(label=T("tab_live")),                           # tab_live
         gr.update(label=T("tab_audio")),                          # tab_audio
@@ -466,7 +575,7 @@ def handle_language_change(lang_value: str):
     valid_codes = {"zh"} | set(SenseiLLM_target_codes())
     if lang_value in valid_codes:
         CURRENT_LANG["name"] = lang_value
-    entries = sorted(HISTORY_DIR.glob("*.json"), reverse=True)
+    entries = _cards()
     if not entries:
         return ""
     try:
@@ -935,6 +1044,20 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
             scale=2,
         )
 
+    # Lecture session (PROPOSAL B3): one directory per lecture, one handout
+    # per lecture. Without it every course of the day lands in one pile.
+    with gr.Row():
+        course_name = gr.Textbox(
+            label=T("course_label"),
+            placeholder=T("course_placeholder"),
+            lines=1,
+            scale=3,
+        )
+        session_btn = gr.Button(T("session_start_btn"), variant="primary", scale=1)
+        handout_btn = gr.Button(T("handout_btn"), variant="secondary", scale=1)
+    session_status = gr.Markdown(_session_status_md())
+    handout_file = gr.File(label=T("handout_file_label"), visible=False)
+
     with gr.Tabs() as tabs_root:
         with gr.Tab(T("tab_live")) as tab_live:
             live_md = gr.Markdown(T("live_md"))
@@ -1051,6 +1174,12 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
     )
     history_refresh.click(refresh_dropdowns, None, dropdown_targets)
 
+    session_btn.click(
+        handle_session_toggle, course_name,
+        [session_btn, session_status] + dropdown_targets,
+    )
+    handout_btn.click(handle_export_handout, None, [handout_file, session_status])
+
     theme_picker.change(handle_theme_change, theme_picker, html_out)
     glossary_picker.change(handle_glossary_change, glossary_picker, None)
     lecture_lang_picker.change(handle_lecture_language_change, lecture_lang_picker, None)
@@ -1061,6 +1190,7 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
         header_md, live_md, history_md, suggestions_md,
         ui_language_picker, theme_picker, language_picker, template_hint, extend_source,
         glossary_picker, lecture_lang_picker,
+        course_name, session_btn, handout_btn, session_status, handout_file,
         tab_live, tab_audio, tab_text, tab_history,
         live_status, live_btn,
         audio_in, audio_btn, audio_extend_btn,
@@ -1078,7 +1208,7 @@ with gr.Blocks(title="Sensei · On-device AI Co-Teacher") as app:
 
 if __name__ == "__main__":
     fastapi_app = build_fastapi_app(
-        app, HISTORY_DIR, _lang, theme=SENSEI_THEME, css=SENSEI_CSS,
+        app, _history_dir, _lang, theme=SENSEI_THEME, css=SENSEI_CSS,
     )
     print()
     print("=" * 60)
