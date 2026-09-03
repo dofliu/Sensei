@@ -55,9 +55,12 @@ body{--c1:45,212,191;--c2:139,92,246}
 .bg{background:radial-gradient(1400px 900px at 50% 44%,rgba(45,212,191,.10),transparent 66%),
  linear-gradient(160deg,#060a12 0%,#03050a 60%,#010204 100%)}
 .aur{opacity:.28}
-.shk{animation:shk .5s cubic-bezier(.36,.07,.19,.97) both;animation-delay:1.5s}
 @keyframes shk{10%,90%{transform:translateX(-3px)}20%,80%{transform:translateX(6px)}
  30%,50%,70%{transform:translateX(-11px)}40%,60%{transform:translateX(11px)}100%{transform:none}}
+/* Two animation shorthands on one element overwrite each other (the element would
+   stay at opacity:0), so rise + shake are declared as a single animation list. */
+.in.shk{animation:rise 1s cubic-bezier(.16,1,.3,1) var(--d,0s) both,
+ shk .5s cubic-bezier(.36,.07,.19,.97) 2s both}
 .mega{font-size:158px;font-weight:900;line-height:1.1;text-align:center;letter-spacing:.01em;color:#f4f8ff;
  text-shadow:0 0 90px rgba(45,212,191,.34)}
 .strike{position:relative;display:inline-block;color:rgba(232,238,247,.34)}

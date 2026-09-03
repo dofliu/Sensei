@@ -231,7 +231,7 @@ scene("scene04_pipeline", "管線", 10, TEAL, "56,189,248", css="""
    <div class="wire fadein" style="--d:1.75s"><i style="--wd:.5s"></i></div>
    <div class="nd in" style="--d:2.0s"><div class="ni">🧠</div><div class="nn">Gemma 4</div><div class="nm">e2b · 7 GB</div></div>
    <div class="wire fadein" style="--d:2.3s"><i style="--wd:1s"></i></div>
-   <div class="nd in" style="--d:2.55s"><div class="ni">🎴</div><div class="nn">結構化卡片</div><div class="nm">/display</div></div>
+   <div class="nd in" style="--d:2.55s"><div class="ni">📇</div><div class="nn">結構化卡片</div><div class="nm">/display</div></div>
  </div>
  <div class="encl in" style="--d:3.2s">● &nbsp;以上每一步，都跑在老師這台筆電裡</div>
 """)
@@ -271,7 +271,8 @@ scene("scene05_asr", "ASR", 9, TEAL, "56,189,248", css="""
 """)
 
 scene("scene06_tools", "tool calling", 9, TEAL, VIOLET, css="""
-.tools{display:grid;grid-template-columns:repeat(4,300px);gap:20px;margin-top:46px;justify-content:center}
+.tools{display:flex;flex-wrap:wrap;gap:20px;margin-top:46px;justify-content:center;max-width:1360px}
+.tl{width:300px}
 .tl{padding:24px 20px;border-radius:16px;text-align:center;
  background:rgba(16,28,46,.82);border:1.5px solid rgba(150,200,255,.18)}
 .tl .tn{font-family:"Noto Sans Mono CJK TC",monospace;font-size:23px;color:#a9bdd8;white-space:nowrap}
@@ -290,7 +291,6 @@ scene("scene06_tools", "tool calling", 9, TEAL, VIOLET, css="""
    <div class="tl in" style="--d:1.65s"><div class="tn">swot</div></div>
    <div class="tl in" style="--d:1.75s"><div class="tn">pyramid</div></div>
    <div class="tl in" style="--d:1.85s"><div class="tn">quiz_card</div></div>
-   <div class="tl in" style="--d:1.95s"><div class="tn">no_card</div></div>
  </div>
  <div class="pick in" style="--d:2.7s">模型挑中 <span class="accent">enumeration_cards</span> — 因為這句話在「並列」</div>
 """)
@@ -324,7 +324,8 @@ scene("scene07_layers", "四層防線", 8, TEAL, VIOLET, css="""
 # ══════════════════════════════════════════════════════════════════
 
 scene("scene08_templates", "七模板", 9, ORANGE, AMBER, css="""
-.tg{display:grid;grid-template-columns:repeat(4,340px);gap:22px;margin-top:48px;justify-content:center}
+.tg{display:flex;flex-wrap:wrap;gap:22px;margin-top:48px;justify-content:center;max-width:1510px}
+.tc{width:340px}
 .tc{padding:28px 24px;border-radius:18px;text-align:center;
  background:rgba(28,22,16,.78);border:1.5px solid rgba(217,119,87,.30)}
 .tc .ic{font-size:52px;line-height:1}
@@ -341,7 +342,6 @@ scene("scene08_templates", "七模板", 9, ORANGE, AMBER, css="""
    <div class="tc in" style="--d:1.35s"><div class="ic">🎯</div><div class="nm">SWOT</div><div class="ex">優勢劣勢機會威脅</div></div>
    <div class="tc in" style="--d:1.45s"><div class="ic">🔺</div><div class="nm">金字塔</div><div class="ex">「從底層到頂層」</div></div>
    <div class="tc in" style="--d:1.55s"><div class="ic">📝</div><div class="nm">隨堂測驗</div><div class="ex">「來考一題」</div></div>
-   <div class="tc in" style="--d:1.65s"><div class="ic">🚫</div><div class="nm">不出卡</div><div class="ex">閒聊、過場、點名</div></div>
  </div>
  <div class="sub in" style="--d:2.3s;margin-top:44px;font-size:32px">
    版面是<span style="color:#f0a184;font-weight:700">固定的</span> — 不讓模型每句話發明一種新排版
@@ -354,7 +354,7 @@ scene("scene09_enum", "列舉卡片 mock", 8, ORANGE, AMBER, css="""
 .row{display:flex;gap:20px;margin-top:26px}
 .row>div{flex:1}
 """, body="""
- <div class="say in" style="--d:.15s">老師說：「控制不是只有 PID，還有最佳、類神經、非線性、強健控制。」</div>
+ <div class="say in" style="--d:.15s">老師說：「控制不是只有 PID，還有最佳、類神經、非線性、強健、適應控制。」</div>
  <div class="paper sheet in" style="--d:.85s">
    <div class="pm">● &nbsp;ENUMERATION CARDS</div>
    <div class="pt" style="margin-top:14px">控制方法的全貌</div>
@@ -577,9 +577,12 @@ body{--c1:45,212,191;--c2:139,92,246}
 .bg{background:radial-gradient(1400px 900px at 50% 44%,rgba(45,212,191,.10),transparent 66%),
  linear-gradient(160deg,#060a12 0%,#03050a 60%,#010204 100%)}
 .aur{opacity:.28}
-.shk{animation:shk .5s cubic-bezier(.36,.07,.19,.97) both;animation-delay:1.5s}
 @keyframes shk{10%,90%{transform:translateX(-3px)}20%,80%{transform:translateX(6px)}
  30%,50%,70%{transform:translateX(-11px)}40%,60%{transform:translateX(11px)}100%{transform:none}}
+/* Two animation shorthands on one element overwrite each other (the element would
+   stay at opacity:0), so rise + shake are declared as a single animation list. */
+.in.shk{animation:rise 1s cubic-bezier(.16,1,.3,1) var(--d,0s) both,
+ shk .5s cubic-bezier(.36,.07,.19,.97) 2s both}
 .mega{font-size:158px;font-weight:900;line-height:1.1;text-align:center;letter-spacing:.01em;color:#f4f8ff;
  text-shadow:0 0 90px rgba(45,212,191,.34)}
 .strike{position:relative;display:inline-block;color:rgba(232,238,247,.34)}

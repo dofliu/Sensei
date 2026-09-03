@@ -51,7 +51,8 @@ body{font-family:"Noto Sans CJK TC","Noto Sans TC",sans-serif;color:#e8eef7;posi
 .pcard .n{font-family:"Noto Serif CJK TC","Noto Sans CJK TC",serif;font-size:34px;font-weight:700;color:#0f0d0a;white-space:nowrap}
 .pcard .d{font-family:"Noto Sans Mono CJK TC",monospace;font-size:18px;color:#7a6a52;margin-top:8px;white-space:nowrap}
 
-.tools{display:grid;grid-template-columns:repeat(4,300px);gap:20px;margin-top:46px;justify-content:center}
+.tools{display:flex;flex-wrap:wrap;gap:20px;margin-top:46px;justify-content:center;max-width:1360px}
+.tl{width:300px}
 .tl{padding:24px 20px;border-radius:16px;text-align:center;
  background:rgba(16,28,46,.82);border:1.5px solid rgba(150,200,255,.18)}
 .tl .tn{font-family:"Noto Sans Mono CJK TC",monospace;font-size:23px;color:#a9bdd8;white-space:nowrap}
@@ -76,7 +77,6 @@ body{font-family:"Noto Sans CJK TC","Noto Sans TC",sans-serif;color:#e8eef7;posi
    <div class="tl in" style="--d:1.65s"><div class="tn">swot</div></div>
    <div class="tl in" style="--d:1.75s"><div class="tn">pyramid</div></div>
    <div class="tl in" style="--d:1.85s"><div class="tn">quiz_card</div></div>
-   <div class="tl in" style="--d:1.95s"><div class="tn">no_card</div></div>
  </div>
  <div class="pick in" style="--d:2.7s">模型挑中 <span class="accent">enumeration_cards</span> — 因為這句話在「並列」</div>
 
