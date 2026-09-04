@@ -22,6 +22,7 @@ Why custom initial_prompt:
   switch course or language from the operator UI without editing Python.
 """
 
+import os
 from pathlib import Path
 import numpy as np
 from faster_whisper import WhisperModel
@@ -45,6 +46,10 @@ class ASRConfig:
         else "本逐字稿是大學課程的講課內容。"
     )
 
+    # Local HF cache root (respects HF_HOME to avoid collision with system HF_HUB_CACHE)
+    _default_cache = Path(os.environ.get("HF_HOME", r"D:\hf-cache")) / "hub"
+    DOWNLOAD_ROOT = str(_default_cache) if _default_cache.is_dir() else None
+
 
 class SenseiASR:
     """
@@ -56,6 +61,7 @@ class SenseiASR:
             self.config.MODEL_SIZE,
             device=self.config.DEVICE,
             compute_type=self.config.COMPUTE_TYPE,
+            download_root=self.config.DOWNLOAD_ROOT,
             local_files_only=local_files_only,
         )
 

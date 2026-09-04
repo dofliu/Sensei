@@ -228,7 +228,7 @@ def smoke_whisper() -> int:
     print(f"  fw        faster-whisper {getattr(faster_whisper, '__version__', '?')}")
 
     try:
-        path = download_model(WHISPER_SIZE, local_files_only=True)
+        path = download_model(WHISPER_SIZE, cache_dir=str(repo.parent), local_files_only=True)
         print(f"  resolved  {path}")
     except Exception as e:
         print(f"FAIL faster-whisper cannot resolve {WHISPER_SIZE} offline: "
