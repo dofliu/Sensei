@@ -283,7 +283,7 @@ scene("scene06_tools", "tool calling", 9, TEAL, VIOLET, css="""
 .pick{margin-top:44px;font-size:36px;color:rgba(232,238,247,.82)}
 """, body="""
  <div class="kicker in" style="--d:.15s">STEP 2 · 結構判斷</div>
- <div class="h2 in" style="--d:.45s;margin-top:20px;font-size:60px">七個模板 ＋ 一個「這句不用出卡」</div>
+ <div class="h2 in" style="--d:.45s;margin-top:20px;font-size:60px">八個模板 ＋ 一個「這句不用出卡」</div>
  <div class="sub in" style="--d:.85s;margin-top:22px;font-size:31px">Gemma 4 用原生 function calling 挑一個工具，把老師的話填進欄位</div>
  <div class="tools">
    <div class="tl in" style="--d:1.35s"><div class="tn">comparison_table</div></div>
@@ -293,7 +293,8 @@ scene("scene06_tools", "tool calling", 9, TEAL, VIOLET, css="""
    <div class="tl in" style="--d:1.65s"><div class="tn">swot</div></div>
    <div class="tl in" style="--d:1.75s"><div class="tn">pyramid</div></div>
    <div class="tl in" style="--d:1.85s"><div class="tn">quiz_card</div></div>
-   <div class="tl skip in" style="--d:1.95s"><div class="tn">no_card</div></div>
+   <div class="tl in" style="--d:1.90s"><div class="tn">key_fact</div></div>
+   <div class="tl skip in" style="--d:2.0s"><div class="tn">no_card</div></div>
  </div>
  <div class="pick in" style="--d:2.7s">模型挑中 <span class="accent">enumeration_cards</span> — 因為這句話在「並列」</div>
 """)
@@ -326,7 +327,7 @@ scene("scene07_layers", "四層防線", 8, TEAL, VIOLET, css="""
 # 模板章 — 暖琥珀
 # ══════════════════════════════════════════════════════════════════
 
-scene("scene08_templates", "七模板", 9, ORANGE, AMBER, css="""
+scene("scene08_templates", "八模板", 9, ORANGE, AMBER, css="""
 .tg{display:flex;flex-wrap:wrap;gap:22px;margin-top:48px;justify-content:center;max-width:1510px}
 .tc{width:340px}
 .tc{padding:28px 24px;border-radius:18px;text-align:center;
@@ -336,7 +337,7 @@ scene("scene08_templates", "七模板", 9, ORANGE, AMBER, css="""
 .tc .ex{font-size:22px;color:rgba(240,215,200,.6);margin-top:10px;line-height:1.4}
 """, body="""
  <div class="kicker in" style="--d:.15s;color:#f0a184">CURATED TEMPLATES</div>
- <div class="h2 in" style="--d:.45s;margin-top:20px;font-size:62px">七種說話方式，七種版面</div>
+ <div class="h2 in" style="--d:.45s;margin-top:20px;font-size:62px">八種說話方式，八種版面</div>
  <div class="tg">
    <div class="tc in" style="--d:.95s"><div class="ic">📇</div><div class="nm">列舉卡片</div><div class="ex">「有 A、B、C、D」</div></div>
    <div class="tc in" style="--d:1.05s"><div class="ic">⚖️</div><div class="nm">比較表</div><div class="ex">「A 跟 B 差在…」</div></div>
@@ -345,6 +346,7 @@ scene("scene08_templates", "七模板", 9, ORANGE, AMBER, css="""
    <div class="tc in" style="--d:1.35s"><div class="ic">🎯</div><div class="nm">SWOT</div><div class="ex">優勢劣勢機會威脅</div></div>
    <div class="tc in" style="--d:1.45s"><div class="ic">🔺</div><div class="nm">金字塔</div><div class="ex">「從底層到頂層」</div></div>
    <div class="tc in" style="--d:1.55s"><div class="ic">📝</div><div class="nm">隨堂測驗</div><div class="ex">「來考一題」</div></div>
+   <div class="tc in" style="--d:1.65s"><div class="ic">💡</div><div class="nm">關鍵事實</div><div class="ex">「就一個數字要記住」</div></div>
  </div>
  <div class="sub in" style="--d:2.3s;margin-top:44px;font-size:32px">
    版面是<span style="color:#f0a184;font-weight:700">固定的</span> — 不讓模型每句話發明一種新排版
