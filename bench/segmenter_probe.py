@@ -67,7 +67,7 @@ def feed(listener, seconds: float, amp: float, speech: bool = False) -> None:
 def run(name: str, script, worker_delay: float = 0.0, expect: str = "") -> None:
     got: list[float] = []
 
-    def on_utterance(audio, sr):
+    def on_utterance(audio, sr, queued_s=0.0):
         if worker_delay:
             time.sleep(worker_delay)
         got.append(len(audio) / sr)
@@ -86,7 +86,7 @@ def run(name: str, script, worker_delay: float = 0.0, expect: str = "") -> None:
     st = listener.stats
     lens = " ".join(f"{d:.1f}s" for d in got) or "—"
     print(f"{name:<24} {lens:<26} sent={st['utterances']} short={st['too_short']} "
-          f"dropped={st['dropped']} forced={st['forced']}")
+          f"dropped={st['dropped']}({st['dropped_s']}s) forced={st['forced']}")
     if expect:
         print(f"{'':<24} want: {expect}")
 

@@ -444,7 +444,7 @@ def handle_summarize_today():
 CONTINUOUS_LOG_MAX = 10
 CONTINUOUS_LOG: deque = deque(maxlen=CONTINUOUS_LOG_MAX)
 # Whole-lecture tallies; CONTINUOUS_LOG only keeps the last few lines.
-CONTINUOUS_COUNTS = {"cards": 0, "skipped": 0}
+CONTINUOUS_COUNTS = {"cards": 0, "skipped": 0, "dropped_s": 0.0}
 
 GATE_LABELS = {
     "card":        "gate_card",
@@ -454,6 +454,7 @@ GATE_LABELS = {
     "operator":    "gate_card",
     "raw":         "gate_card",
     "error":       "gate_error",
+    "dropped":     "gate_dropped",
 }
 
 
@@ -463,16 +464,20 @@ def _log_utterance(gate: str, transcript: str, note: str = "") -> None:
     ))
 
 
-def _log_skipped(transcript: str, gate: str, reason: str) -> None:
+def _log_skipped(transcript: str, gate: str, reason: str, **extra) -> None:
     """Append the skip to skipped.jsonl in the lecture directory.
 
     Not a card, so it never reaches /display — but it is exactly the data the
     C2 bench needs to answer "how often is the gate wrong?", and it is cheap
     to write. .jsonl, so session.card_files() ignores it.
+
+    Dropped utterances go here too, under gate="dropped". Without that a drop
+    leaves no trace at all — no card, no skip — and the lecture's record
+    quietly omits something the teacher said.
     """
     line = json.dumps({
         "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
-        "gate": gate, "reason": reason, "transcript": transcript,
+        "gate": gate, "reason": reason, "transcript": transcript, **extra,
     }, ensure_ascii=False)
     try:
         with (_history_dir() / "skipped.jsonl").open("a", encoding="utf-8") as f:
@@ -481,7 +486,26 @@ def _log_skipped(transcript: str, gate: str, reason: str) -> None:
         print(f"[Sensei] could not log skipped utterance: {e}", flush=True)
 
 
-def _on_continuous_utterance(audio, samplerate: int) -> None:
+def _timing(result: dict, queued_s: float) -> dict:
+    """The three numbers that say where a lecture's time went."""
+    return {
+        "audio_s": result.get("_audio_s", 0),
+        "queue_ms": int(queued_s * 1000),
+        "asr_ms": result.get("_asr_ms", 0),
+        "llm_ms": result.get("_llm_ms", 0),
+    }
+
+
+def _log_dropped(lost_s: float) -> None:
+    """The queue threw away an utterance before it was ever transcribed."""
+    CONTINUOUS_COUNTS["dropped_s"] = round(
+        CONTINUOUS_COUNTS["dropped_s"] + lost_s, 1)
+    _log_skipped("", "dropped", f"{lost_s:.1f}s never transcribed",
+                 audio_s=round(lost_s, 1))
+    _log_utterance("dropped", "", f"{lost_s:.1f}s lost — pipeline behind")
+
+
+def _on_continuous_utterance(audio, samplerate: int, queued_s: float = 0.0) -> None:
     """Runs on the listener's worker thread, one utterance at a time."""
     try:
         result = pipeline.process_utterance_audio(audio, sample_rate=samplerate)
@@ -491,22 +515,24 @@ def _on_continuous_utterance(audio, samplerate: int) -> None:
         return
     transcript = result.pop("_transcript", "")
     gate = result.get("_gate", "?")
+    timing = _timing(result, queued_s)
+    took = f"{timing['asr_ms'] + timing['llm_ms']} ms"
     if result.get("template") == "no_card":
         reason = result.get("reason", "")
         CONTINUOUS_COUNTS["skipped"] += 1
-        _log_skipped(transcript, gate, reason)
+        _log_skipped(transcript, gate, reason, **timing)
         # The rule layer's reason just restates the label; show the measured
         # content length instead, which is the number the teacher would tune.
         note = f"{result.get('_content', 0)} < {GATE_MIN_CONTENT}" if gate == "too-short" else reason
-        _log_utterance(gate, transcript, note)
+        _log_utterance(gate, transcript, f"{note} · {took}")
         return
     saved = _save_to_history(result, transcript)
     _translate_and_persist(result, saved)
     CONTINUOUS_COUNTS["cards"] += 1
-    _log_utterance(gate, transcript, result.get("template", ""))
+    _log_utterance(gate, transcript, f"{result.get('template', '')} · {took}")
 
 
-continuous = ContinuousListener(_on_continuous_utterance)
+continuous = ContinuousListener(_on_continuous_utterance, on_dropped=_log_dropped)
 
 
 def _continuous_status() -> str:
@@ -519,6 +545,7 @@ def _continuous_status() -> str:
         skipped=CONTINUOUS_COUNTS["skipped"],
         short=st["too_short"],
         dropped=st["dropped"],
+        dropped_s=st.get("dropped_s", 0),
     )
 
 
