@@ -226,7 +226,7 @@ sensei/
 │   └── session.py       ← one directory per lecture (history/<date>_<course>/)
 ├── frontend/
 │   ├── app.py           ← Gradio operator console: layout, handlers, history
-│   ├── renderers.py     ← THEMES + 7 HTML renderers (≥24 px / ≥36 px large-print rule)
+│   ├── renderers.py     ← THEMES + 8 HTML renderers (≥24 px / ≥36 px large-print rule)
 │   ├── i18n.py          ← operator-UI strings (zh / en)
 │   ├── display.py       ← /display projector page, SSE feed, FastAPI mount
 │   └── handout.py       ← a lecture directory → one printable handout.html

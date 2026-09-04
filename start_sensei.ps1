@@ -23,7 +23,11 @@ param(
 )
 
 Set-Location -Path $PSScriptRoot
+# Same pairing as dry_run.ps1: PYTHONIOENCODING makes the app emit UTF-8, and
+# the Console line sets the console output code page so its Chinese startup
+# banner renders instead of coming out as CP950 mojibake.
 $env:PYTHONIOENCODING = "utf-8"
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
 function Say([string]$msg)  { Write-Host "  $msg" }
 function Ok([string]$msg)   { Write-Host "  [OK]   $msg" -ForegroundColor Green }

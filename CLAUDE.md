@@ -35,7 +35,8 @@ Roadmap, tech-debt list and open decisions live in [PROJECT_ENHANCEMENT_PROPOSAL
 **Nothing in v2 has run on the real rig yet.** Everything above was verified in the Linux sandbox against stubs. `dry_run.ps1` and `start_sensei.ps1` are still unexercised on Windows.
 
 ### Next (in order) ⏳
-1. **Real-rig validation** — `.\dry_run.ps1` (expect 9/9), `.\start_sensei.ps1`, then one real lecture start to finish: name the course, start continuous listening, teach, export the handout.
+0. **`ollama pull gemma4:e2b`** — the first real-rig `dry_run.ps1` (2026-09-04) reported the model missing on the current machine, which is what failed steps 3, 6 and 7. Steps 1–5 and 8 passed; the B1 gate thresholds were correct on both the Chinese and the English probe sentences.
+1. **Real-rig validation** — `.\dry_run.ps1` (expect 9/9 once the model is pulled), `.\start_sensei.ps1`, then one real lecture start to finish: name the course, start continuous listening, teach, export the handout.
 2. **Tune the B1 constants** from that lecture. They are defaults, not measurements — all of them are named constants at the top of `core/live_mic.py` and `core/pipeline.py`, and `python -m bench.segmenter_probe` shows what a change does. The three questions to answer: too many cards or too few, do cards arrive late (the `dropped` counter), does the skip log show `no_card` refusing things it should have kept.
 3. **C2 Evaluation bench** — `bench/utterances.jsonl`, template hit-rate and gate accuracy for e2b vs e4b (paper material). The `_gate` field and `skipped.jsonl` from a real lecture are the raw data.
 4. C1 student-side quiz answering over LAN — only after checking the classroom Wi-Fi lets phones reach the laptop.
@@ -244,7 +245,7 @@ Phase B is code-complete. The next thing is not more code.
 - **Type hints** on public functions. **Pydantic v2** syntax.
 - **No emojis in code**, OK in `print()` and Markdown. Print prefixes: `[Sensei ASR]`, `[Sensei LLM]`, `[Pipeline]`, `[LiveMic]`, `[Sensei]`.
 - **Where things go**: card HTML → `frontend/renderers.py`; UI strings → `frontend/i18n.py`; projector/transport → `frontend/display.py`; Gradio layout and handlers → `frontend/app.py`. Don't grow `app.py` back into a monolith.
-- **PowerShell scripts ASCII-only**; delegate Chinese to a Python helper (see `dry_run.ps1` / `dry_run_smoke.py`).
+- **PowerShell scripts ASCII-only**; delegate Chinese to a Python helper (see `dry_run.ps1` / `dry_run_smoke.py`). That keeps PS 5.1 from mis-parsing the *source*, but it is only half the job: PowerShell also *decodes* a child process's stdout with the console code page, so any script that shows Python output needs `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` next to `$env:PYTHONIOENCODING`, or the Chinese comes back as mojibake.
 - **No unit-test suite, CI, Docker, poetry, mypy, ruff, pre-commit.** `bench/` is the one allowed exception, because it produces data rather than gating commits — labelled utterances, a runner, and `segmenter_probe.py` (a tuning tool for the B1 constants). Nothing in `bench/` runs automatically.
 - **No async unless the transport needs it** (the SSE generator is the one place).
 - **Don't refactor for "cleanliness"**; refactor only when the next feature needs it, move-only, verified line-by-line.
