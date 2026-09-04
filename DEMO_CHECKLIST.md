@@ -1,5 +1,11 @@
 # Day 7 拍攝 Day Checklist
 
+> **⚠️ 重要說明（2026-05-14 更新）**：本檔案是**原始實機拍攝計畫的當日對照清單**。Kaggle 實際提交版本走 1:45 motion-graphics 簡報路線，沒有執行此清單。
+>
+> 本檔案保留作為未來真實教室重拍時的 production reference。詳見 [DEMO_SCRIPT.md 頂部說明](DEMO_SCRIPT.md) 與 [WRITEUP.md §8](WRITEUP.md#8-roadmap-and-honest-limits)。
+>
+> ---
+>
 > 給你拍攝當天逐項對照用。最遲拍攝前一晚把所有 ❗ 項目跑過一遍。
 
 ## ❗ 拍攝前 24 小時必確認

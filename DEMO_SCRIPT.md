@@ -1,5 +1,13 @@
 # Sensei · Demo 影片腳本 (3 分鐘) — 混合拍法版
 
+> **⚠️ 重要說明（2026-05-14 更新）**：本檔案是 Sensei demo video 的**原始實機拍攝製作計畫**——三軌（相機 / `/display` 螢幕錄影 / Operator 螢幕錄影）+ NCUT 教室實地錄影 + 老師現場演示。
+>
+> **實際 Kaggle 提交版本走的是另一條路**：1:45 motion-graphics 簡報（AI 生成視覺 + 真實 `ollama run gemma4:e2b` 終端機畫面當 on-device 證明）。詳見 [WRITEUP.md §8](WRITEUP.md#8-roadmap-and-honest-limits)。
+>
+> 本檔案保留作為：(1) 未來真實教室重拍時的 production reference；(2) 給技術評審看「我們有完整的實機拍攝計畫，只是因環境限制改走 motion graphic」的設計記錄。
+>
+> ---
+>
 > 目標觀眾：Kaggle Gemma 4 Good Hackathon 評審（英語為主、需要中文字幕）。
 > 核心訊息：「On-device AI co-teacher. No cloud. Runs on a laptop.」
 > 影片總長：≤ 3 分鐘（YouTube unlisted）。

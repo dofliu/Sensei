@@ -548,6 +548,84 @@ def render_quiz_card(d: dict) -> str:
     )
 
 
+def render_key_fact(d: dict) -> str:
+    """
+    Paper-editorial single-concept spotlight: small mono badge, italic serif
+    title, OVERSIZED accent-colored highlight as the visual anchor, body
+    statement underneath, optional muted detail line.
+
+    Used when the teacher's speech is about one thing rather than a list —
+    definitions, key specs, key numbers, single new concepts. enumeration_cards
+    has min_length=2, so single-item speech falls here naturally.
+    """
+    t = _theme()
+    accents = t["accents"]
+    fg_strong = t["fg_strong"]
+    fg_muted = t["fg_muted"]
+    c = accents[0]
+
+    mono_label_style = (
+        f"font-family:{FONT_MONO};font-size:15px;font-weight:500;"
+        f"letter-spacing:0.18em;text-transform:uppercase;color:{fg_muted};"
+    )
+
+    badge_html = (
+        f"<div style='{mono_label_style}margin-bottom:24px;'>"
+        f"<span style='color:{c};font-size:16px;'>●</span>&nbsp; "
+        f"KEY FACT</div>"
+    )
+
+    icon_html = ""
+    if d.get("icon"):
+        icon_html = (
+            f"<div style='margin-bottom:18px;'>"
+            f"{_lucide_svg(d['icon'], c)}"
+            f"</div>"
+        )
+
+    title_html = ""
+    if d.get("title"):
+        title_html = (
+            f"<div style='font-family:{FONT_SERIF};font-size:44px;font-weight:500;"
+            f"color:{fg_muted};margin-bottom:32px;line-height:1.15;"
+            f"letter-spacing:-0.015em;font-style:italic;'>"
+            f"{d['title']}</div>"
+        )
+
+    highlight_html = (
+        f"<div style='font-family:{FONT_SERIF_ITALIC};font-size:120px;font-weight:500;"
+        f"font-style:italic;color:{c};line-height:1.0;"
+        f"letter-spacing:-0.02em;margin-bottom:38px;'>"
+        f"{d.get('highlight','')}</div>"
+    )
+
+    statement_html = (
+        f"<div style='font-family:{FONT_BODY};font-size:32px;font-weight:500;"
+        f"color:{fg_strong};line-height:1.35;letter-spacing:-0.005em;'>"
+        f"{d.get('statement','')}</div>"
+    )
+
+    detail = (d.get("detail") or "").strip()
+    detail_html = ""
+    if detail:
+        detail_html = (
+            f"<div style='font-family:{FONT_BODY};font-size:24px;"
+            f"color:{fg_muted};margin-top:18px;line-height:1.45;"
+            f"font-style:italic;'>{detail}</div>"
+        )
+
+    return (
+        f"<div style='{_container_style()}'>"
+        f"{badge_html}"
+        f"{icon_html}"
+        f"{title_html}"
+        f"{highlight_html}"
+        f"{statement_html}"
+        f"{detail_html}"
+        f"</div>"
+    )
+
+
 RENDERERS = {
     "enumeration_cards": render_enumeration_cards,
     "comparison_table":  render_comparison_table,
@@ -556,6 +634,7 @@ RENDERERS = {
     "swot":              render_swot,
     "pyramid":           render_pyramid,
     "quiz_card":         render_quiz_card,
+    "key_fact":          render_key_fact,
 }
 
 

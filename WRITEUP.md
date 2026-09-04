@@ -134,7 +134,7 @@ What ships by Day 10:
 - **Native Gemma 4 function-calling** as the primary template-selection path, with JSON-mode as a silent fallback when small-model tool-arg filling drops fields. Template tools are auto-derived from Pydantic schemas — no hand-written tool spec
 - **Multilingual projection** — the projector view re-renders in any of 8 languages on demand, all via the same on-device Gemma 4
 - **Lenient salvage** — when Gemma 4 e2b drops a required field on nested arrays, Sensei fills safe placeholders (icon → `circle`, desc → `""`) rather than crashing the demo. Logged transparently as `_salvaged: true` in the history JSON
-- Real classroom demo video shot at NCUT
+- 3-minute submission video — stylized motion-graphics presentation of the architecture, the seven visualization templates, the on-device positioning, and the why-not-cloud-LLM argument. The running app itself is documented in the repository: paper-editorial screenshots in `docs/screenshots/`, a one-command `dry_run.ps1` rehearsal that exercises every layer end-to-end (Whisper → Gemma 4 tool calling → Pydantic → both renderers), and a `DEMO_SCRIPT.md` that preserves the original three-track classroom-shoot production plan as a reference for future deployments.
 
 ### What we deliberately chose **not** to build
 

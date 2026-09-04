@@ -86,6 +86,7 @@ UI_TEXTS = {
         "tpl_swot":           "🎯 SWOT 分析（優劣機威）",
         "tpl_pyramid":        "🔺 金字塔（線性層級）",
         "tpl_quiz":           "📝 隨堂測驗（4 選 1）",
+        "tpl_key_fact":       "💡 關鍵事實（單一概念聚焦）",
         # Extend source sentinel
         "extend_latest":      "📌 最近一張",
         # Error messages (returned by handlers when inputs are bad)
@@ -218,6 +219,7 @@ UI_TEXTS = {
         "tpl_swot":           "🎯 SWOT analysis",
         "tpl_pyramid":        "🔺 Pyramid (linear layers)",
         "tpl_quiz":           "📝 Quick quiz (4-option MCQ)",
+        "tpl_key_fact":       "💡 Key fact (single-concept spotlight)",
         # Extend source sentinel
         "extend_latest":      "📌 Most recent card",
         # Error messages

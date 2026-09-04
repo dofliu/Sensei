@@ -59,6 +59,7 @@ TOOL_DESCRIPTIONS = {
     "swot":              "當老師明確談優勢、劣勢、機會、威脅四面向（或其中至少三面向）時呼叫。",
     "pyramid":           "當老師描述線性層級（從基礎到頂層的單軸結構）時呼叫，例如 Maslow 需求層次。",
     "quiz_card":         "當老師想做隨堂測驗 / 形成性檢核 / 4 選 1 選擇題時呼叫（例：「來考一題」、「快問快答」、「下列哪個是…」、明確口述一個帶選項的問句）。",
+    "key_fact":          "當老師只講一個主概念 / 一個定義 / 一個關鍵規格 / 一個重要數字，沒有並列項目可列舉時呼叫。例：「SG90 馬達範圍 0-180 度」、「agent skill 是讓 AI 有重複性技能」、「Kp 是比例增益」。**若有 ≥2 個並列項目，請改用 enumeration_cards 而非 key_fact**。",
 }
 
 # The 8th tool (PROPOSAL B1). Not a template: it is how the model says "this
@@ -90,8 +91,8 @@ NO_CARD_TOOL = {
 # Appended to SYSTEM_TOOLS_PROMPT only when no_card is on the table, so the
 # manual path's prompt is byte-identical to what it was before B1.
 NO_CARD_RULE = (
-    "\n8. 只有在這段話確實有可視覺化結構（並列項目 / 兩者比較 / 步驟流程 / "
-    "分類層級 / SWOT / 金字塔 / 測驗題）時才呼叫模板工具；"
+    "\n9. 只有在這段話確實有可視覺化結構（並列項目 / 兩者比較 / 步驟流程 / "
+    "分類層級 / SWOT / 金字塔 / 測驗題 / 單一關鍵事實）時才呼叫模板工具；"
     "否則呼叫 `no_card`。這是連續聆聽模式，老師整堂課都在講話，"
     "**大部分句子都應該是 `no_card`**。"
 )
@@ -109,7 +110,11 @@ SYSTEM_TOOLS_PROMPT = (
     "code, bot, users, graduation-cap, lightbulb, book-open, circle。\n"
     "7. quiz_card 工具：`options` 必須恰好 4 個元素，順序對應 A、B、C、D；"
     "**選項文字裡不可再加「A.」「(A)」「A:」「A、」等前綴**，"
-    "渲染器會自動加上字母。`answer` 只能是單一大寫字母 \"A\"、\"B\"、\"C\" 或 \"D\"。"
+    "渲染器會自動加上字母。`answer` 只能是單一大寫字母 \"A\"、\"B\"、\"C\" 或 \"D\"。\n"
+    "8. **模板優先順序**：若老師講的內容只有 **1 個主概念 / 1 個事實 / 1 個定義**，"
+    "請用 `key_fact`，不要硬塞 `enumeration_cards`（後者要求 ≥2 個並列 item）。"
+    "key_fact 的 `highlight` 欄位必須是具體可看的東西（數字、範圍、術語），"
+    "不是抽象描述。"
 )
 
 

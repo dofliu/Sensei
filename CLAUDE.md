@@ -70,7 +70,7 @@ This section survived the hackathon because it *is* the product, not the pitch. 
     ↓ JSON
 [ core/templates.py ]  Pydantic validation (+ lenient salvage in llm.py)
     ↓ validated dict
-[ frontend/renderers.py ]  7 HTML renderers, 3 themes
+[ frontend/renderers.py ]  8 HTML renderers, 3 themes
     ├──▶ frontend/app.py      Gradio operator console (laptop) + history/
     └──▶ frontend/display.py  /display projector page, SSE push
 ```
@@ -90,7 +90,7 @@ sensei/
 │   ├── asr.py           ← ASRConfig, SenseiASR (set_language / set_glossary)
 │   ├── glossary.py      ← list_glossaries / load_glossary over glossaries/*.txt
 │   ├── llm.py           ← LLMConfig, SenseiLLM (structurize / extend / translate / summarize / suggest)
-│   ├── templates.py     ← 7 Pydantic schemas + TEMPLATE_REGISTRY
+│   ├── templates.py     ← 8 Pydantic schemas + TEMPLATE_REGISTRY
 │   ├── pipeline.py      ← SenseiPipeline (+ set_glossary / set_lecture_language / process_utterance)
 │   ├── live_mic.py      ← LiveMicCapture (toggle) + ContinuousListener (B1)
 │   └── session.py       ← lecture directories, card_files / latest_card
@@ -121,8 +121,9 @@ sensei/
 | `swot` | strengths / weaknesses / opportunities / threats | `SWOT` |
 | `pyramid` | layered linear hierarchy, apex to base | `Pyramid` |
 | `quiz_card` | in-lecture 4-option check; spoken trigger "來考一題" / "quick check" | `QuizCard` |
+| `key_fact` | single-concept spotlight (definitions, numbers, specs) | `KeyFact` |
 
-`no_card` is an **8th tool, not a template**: it has no Pydantic class, is absent from `TEMPLATE_REGISTRY` and `TOOL_DESCRIPTIONS`, and is only handed to the model when `structurize(..., allow_no_card=True)`. A deliberate F8 press never sees it.
+`no_card` is a **9th tool, not a template**: it has no Pydantic class, is absent from `TEMPLATE_REGISTRY` and `TOOL_DESCRIPTIONS`, and is only handed to the model when `structurize(..., allow_no_card=True)`. A deliberate F8 press never sees it.
 
 Adding a template = Pydantic class → `TEMPLATE_REGISTRY` → `TOOL_DESCRIPTIONS` in `core/llm.py` → example in `prompts/classifier.txt` → renderer in `frontend/renderers.py` + `RENDERERS` → label in `frontend/i18n.py` + `_list_template_hints` → smoke test. One at a time, never in a batch.
 

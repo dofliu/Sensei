@@ -148,6 +148,23 @@ class QuizCard(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# 8. Key fact: single-concept spotlight card
+#    "SG90 servo: operating range 0–180°, center at 90°"
+#    "agent skill: reusable AI capability, distinct from RAG / MCP"
+#    For pedagogical speech that's about ONE thing, not a list.
+#    enumeration_cards has min_length=2; key_fact catches the single-item case
+#    so unstructured-but-meaningful speech doesn't fall to the friendly fallback.
+# ──────────────────────────────────────────────
+class KeyFact(BaseModel):
+    template: Literal["key_fact"] = "key_fact"
+    title: str = Field(description="Topic name in Traditional Chinese, ≤12 chars ideal")
+    highlight: str = Field(description="The single most visual element — number / range / signature term, ≤20 chars. Rendered very large.")
+    statement: str = Field(description="One-sentence explanation in Traditional Chinese, ≤50 chars")
+    detail: str = Field(default="", description="Optional secondary context, ≤40 chars")
+    icon: str = Field(default="", description="Optional Lucide icon slug")
+
+
+# ──────────────────────────────────────────────
 # Registry — used by llm.py for schema validation
 # ──────────────────────────────────────────────
 TEMPLATE_REGISTRY: dict[str, type[BaseModel]] = {
@@ -158,4 +175,6 @@ TEMPLATE_REGISTRY: dict[str, type[BaseModel]] = {
     "swot":              SWOT,
     "pyramid":           Pyramid,
     "quiz_card":         QuizCard,
+    "key_fact":          KeyFact,
 }
+

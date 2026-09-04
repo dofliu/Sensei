@@ -168,6 +168,7 @@ def _list_template_hints() -> list:
         (T("tpl_swot"),    "swot"),
         (T("tpl_pyramid"), "pyramid"),
         (T("tpl_quiz"),    "quiz_card"),
+        (T("tpl_key_fact"), "key_fact"),
     ]
 
 

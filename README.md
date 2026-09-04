@@ -32,7 +32,7 @@ flowchart TB
         B --> C --> D
     end
 
-    D --> E["**7 visualization templates**<br/>enumeration · comparison · flow<br/>hierarchy · SWOT · pyramid · quiz"]
+    D --> E["**8 visualization templates**<br/>enumeration · comparison · flow · hierarchy<br/>SWOT · pyramid · quiz · key_fact"]
     E --> F["💻 **Operator console**<br/>laptop browser · bilingual UI<br/>lecture sessions · skip log · handout export"]
     E --> G["🎬 **/display** fullscreen view<br/>projector · paper editorial<br/>auto fade-swap"]
 
@@ -47,6 +47,27 @@ flowchart TB
 ```
 
 Four layers of structured-output guarantee, top to bottom: native function calling → JSON mode → Pydantic → lenient salvage. See [WRITEUP §3](WRITEUP.md#3-architecture) for the full reasoning.
+
+## Screenshots
+
+Four real-app captures of the running Sensei pipeline (Whisper → Gemma 4 e2b → Pydantic → paper-editorial renderer). No stylization — these are direct `localhost:7860` screenshots.
+
+### Operator console (laptop)
+
+<p align="center">
+  <img src="docs/screenshots/operator-console-session.png" alt="Sensei operator console: top dropdowns, tabs, session strip with four card thumbnails (enumeration / comparison / key_fact / quiz), prev / latest / next navigation, transcript + JSON on the left, the current quiz_card rendered on the right" width="100%">
+</p>
+
+### `/display` (projector — read-only fullscreen view)
+
+| Template | Capture | Trigger phrase |
+|---|---|---|
+| `enumeration_cards` | <img src="docs/screenshots/display-enumeration_cards.png" alt="Enumeration cards on /display: five Lucide-iconed cells (lightbulb / brain / sliders / shield / code) titled 進階控制方法" width="100%"> | *"控制不是只有 PID，還有最佳、類神經、非線性、強健"* |
+| `comparison_table` | <img src="docs/screenshots/display-comparison_table.png" alt="Comparison table on /display: 單迴路 vs 雙迴路 control across cost and disturbance dimensions, two-column accent colors" width="100%"> | *"我們比較一下單迴路與雙迴路控制…"* |
+| `key_fact` | <img src="docs/screenshots/display-key_fact.png" alt="Key fact on /display: 120-pixel italic serif highlight '0 到 180 度' underneath the SG90 motor title, with a body statement below" width="100%"> | *"Arduino 的 SG90 動作角度範圍是 0 到 180 度…"* (single-concept utterances ↦ this template) |
+| `quiz_card` | <img src="docs/screenshots/display-quiz_card.png" alt="Quiz card on /display: PID question with four options A/B/C/D in large italic serif monograms, answer intentionally not shown on the projection" width="100%"> | *"來考一題、quick check…"* (spoken-trigger guard short-circuits the classifier) |
+
+`/display` is the read-only mirror the teacher projects onto the classroom screen; the operator console drives it. Notice in the quiz card that **the correct answer is intentionally absent** from the projection so the teacher controls reveal pacing — the answer lives in the operator-side JSON view only.
 
 ---
 
@@ -78,7 +99,7 @@ Two simultaneous views:
   • /display fullscreen view (SSE push)       ← classroom projector
 ```
 
-Seven visualization templates cover the most common pedagogical speech patterns:
+Eight visualization templates cover the most common pedagogical speech patterns:
 
 | Template | When | Example trigger | Status |
 |---|---|---|---|
@@ -89,6 +110,7 @@ Seven visualization templates cover the most common pedagogical speech patterns:
 | `swot` | SWOT analysis (2x2 strategic grid) | *"Let's SWOT this strategy..."* | shipped |
 | `pyramid` | Linear hierarchy from apex to base | *"Maslow's hierarchy: physiological at base..."* | shipped |
 | `quiz_card` | In-lecture formative check (4-option MCQ) | *"Quick check — which of these is NOT..."* | shipped |
+| `key_fact` | Single-concept spotlight (definitions, numbers, specs) | *"SG90 motor range is 0 to 180 degrees..."* | shipped |
 
 `quiz_card` has a **spoken trigger guard**: phrases like *"來考一題"*, *"考考大家"*, *"quick check"* hard-force the template before the LLM classifies, so the in-class flow is deterministic — the teacher speaks naturally and the quiz card appears.
 
