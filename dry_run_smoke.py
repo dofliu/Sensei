@@ -94,13 +94,47 @@ def smoke_whisper() -> int:
     only surfaces later as a huggingface_hub LocalEntryNotFoundError from
     inside WhisperModel(). This looks at the files themselves so the preflight
     fails at the cache step with something actionable.
+
+    The path comes from ASRConfig.DOWNLOAD_ROOT rather than being re-derived
+    from the environment. An earlier version of this check listed files under
+    HF_HOME while resolving through a download_model() call that had no
+    cache_dir, so huggingface_hub used HF_HUB_CACHE instead - it printed a
+    complete 3.1 GB cache and failed to resolve, from two different
+    directories, and took four rounds to pin down. A check must look where the
+    app looks, by construction and not by agreement.
     """
     import os
     from pathlib import Path
 
-    home = Path(os.environ.get("HF_HOME") or (Path.home() / ".cache" / "huggingface"))
-    repo = home / "hub" / WHISPER_REPO
-    print(f"  HF_HOME   {home}")
+    # Everything huggingface_hub consults for a cache location, in the order
+    # it consults them. HF_HUB_CACHE wins over HF_HOME, which is the trap.
+    for var in ("HF_HOME", "HF_HUB_CACHE", "HF_ENDPOINT", "TRANSFORMERS_CACHE"):
+        val = os.environ.get(var)
+        print(f"  {var:<18}{val if val else '(unset)'}")
+
+    try:
+        from core.asr import ASRConfig
+        root = ASRConfig.DOWNLOAD_ROOT
+    except Exception as e:
+        print(f"  (could not read ASRConfig.DOWNLOAD_ROOT: {e})")
+        root = None
+    if root:
+        hub = Path(root)
+        print(f"  pinned to         {hub}   <- ASRConfig.DOWNLOAD_ROOT")
+    else:
+        hub = Path(os.environ.get("HF_HUB_CACHE")
+                   or (Path(os.environ.get("HF_HOME")
+                            or (Path.home() / ".cache" / "huggingface")) / "hub"))
+        print(f"  pinned to         (nothing) - falling back to {hub}")
+
+    other = os.environ.get("HF_HUB_CACHE")
+    if other and Path(other) != hub:
+        print(f"  NOTE      HF_HUB_CACHE points somewhere else ({other}).")
+        print(f"            huggingface_hub prefers it over HF_HOME, so any code "
+              f"that does not pass an explicit cache_dir will look there.")
+        print(f"            Sensei pins download_root, so it is unaffected.")
+
+    repo = hub / WHISPER_REPO
     print(f"  repo dir  {repo}")
 
     if not repo.is_dir():
@@ -228,7 +262,7 @@ def smoke_whisper() -> int:
     print(f"  fw        faster-whisper {getattr(faster_whisper, '__version__', '?')}")
 
     try:
-        path = download_model(WHISPER_SIZE, cache_dir=str(repo.parent), local_files_only=True)
+        path = download_model(WHISPER_SIZE, cache_dir=str(hub), local_files_only=True)
         print(f"  resolved  {path}")
     except Exception as e:
         print(f"FAIL faster-whisper cannot resolve {WHISPER_SIZE} offline: "
