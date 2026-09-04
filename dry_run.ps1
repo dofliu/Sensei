@@ -15,9 +15,10 @@ $pass = 0
 $fail = 0
 $warn = 0
 $failed_steps = @()
-# Set by step 3; steps 6 and 7 cannot run without the model and would
-# otherwise report the same missing model as two more independent failures.
+# Set by steps 2 and 3. Steps 6 and 7 cannot run without what they check,
+# and would otherwise report the same root cause again under another name.
 $model_ready = $false
+$whisper_ready = $false
 
 function Step([string]$title, [scriptblock]$block) {
     Write-Host ""
@@ -58,13 +59,24 @@ Step "1. Environment variables" {
 }
 
 # 2. Whisper cache
-Step "2. Faster-Whisper large-v3 in HF cache" {
-    $whisper_dir = "D:\hf-cache\hub\models--Systran--faster-whisper-large-v3"
-    if (Test-Path $whisper_dir) {
-        Ok "$whisper_dir exists"
+# The directory existing is not the question - an interrupted download leaves
+# the directory behind and only fails later, inside WhisperModel(), as a
+# huggingface_hub LocalEntryNotFoundError. The helper checks the files.
+Step "2. Faster-Whisper large-v3 usable offline" {
+    $out = python dry_run_smoke.py whisper 2>&1 | Out-String
+    Write-Host ($out -split "`n" | Where-Object { $_ -match "^\s{2}" } | Out-String).TrimEnd() -ForegroundColor DarkGray
+    if ($LASTEXITCODE -eq 0 -and $out -match "PASS") {
+        Ok "large-v3 cache is complete"
+        $script:whisper_ready = $true
     } else {
-        Fail "Whisper cache not found at $whisper_dir"
-        Hint "Pre-load: python -c `"from faster_whisper import WhisperModel; WhisperModel('large-v3')`""
+        Fail "Whisper cache incomplete or missing"
+        foreach ($line in ($out -split "`n")) {
+            if ($line -match "^FAIL ") { Hint $line.Trim() }
+        }
+        Hint "Re-download (resumes; ~3 GB over HF_ENDPOINT):"
+        Hint "  python -c `"from faster_whisper import WhisperModel; WhisperModel('large-v3')`""
+        Hint "If that cannot reach the Hub, check the mirror is up:"
+        Hint "  curl.exe -I https://hf-mirror.com"
     }
 }
 
@@ -132,6 +144,10 @@ Step "6. LLM smoke: canonical PID prompt -> expect enumeration_cards" {
 Step "7. Pipeline smoke: quiz wake-phrase -> expect quiz_card + trigger fired" {
     if (-not $model_ready) {
         Warn "skipped - needs gemma4:e2b (see step 3)"
+        return
+    }
+    if (-not $whisper_ready) {
+        Warn "skipped - needs the large-v3 cache (see step 2)"
         return
     }
     Hint "(loads Whisper too, ~20-30 s)"

@@ -9,6 +9,7 @@ Usage:
     python dry_run_smoke.py quiz      # full pipeline + spoken-trigger smoke
     python dry_run_smoke.py audio     # list audio input devices
     python dry_run_smoke.py gate      # B1 gate + B3 session/handout, no models
+    python dry_run_smoke.py whisper   # is the large-v3 cache actually usable offline
 
 Exit codes:
     0 = pass
@@ -66,6 +67,132 @@ def smoke_quiz() -> int:
         return 0  # still a pass for shoot purposes
     print(f"FAIL template={template!r}, trigger_fired={trigger_fired}")
     return 1
+
+
+# Files faster-whisper opens when it loads a CTranslate2 Whisper model.
+# vocabulary.json (large-v3) and vocabulary.txt (older conversions) are
+# alternatives, so they are checked as a pair.
+WHISPER_REPO = "models--Systran--faster-whisper-large-v3"
+WHISPER_REQUIRED = ("model.bin", "config.json", "tokenizer.json")
+WHISPER_EITHER = ("vocabulary.json", "vocabulary.txt")
+WHISPER_MODEL_MIN_BYTES = 2_000_000_000   # large-v3 model.bin is ~3.1 GB
+
+
+def _human(n: int) -> str:
+    for unit, div in (("GB", 1e9), ("MB", 1e6), ("KB", 1e3)):
+        if n >= div:
+            return f"{n / div:.1f} {unit}"
+    return f"{n} B"
+
+
+def smoke_whisper() -> int:
+    """Is the Whisper cache actually loadable, not merely present?
+
+    Checking that the directory exists is not enough: an interrupted download
+    leaves the directory, the snapshot and some blobs behind, and the failure
+    only surfaces later as a huggingface_hub LocalEntryNotFoundError from
+    inside WhisperModel(). This looks at the files themselves so the preflight
+    fails at the cache step with something actionable.
+    """
+    import os
+    from pathlib import Path
+
+    home = Path(os.environ.get("HF_HOME") or (Path.home() / ".cache" / "huggingface"))
+    repo = home / "hub" / WHISPER_REPO
+    print(f"  HF_HOME   {home}")
+    print(f"  repo dir  {repo}")
+
+    if not repo.is_dir():
+        print(f"FAIL cache directory not found: {repo}")
+        return 1
+
+    # A partially downloaded blob is the usual cause; name it explicitly.
+    incomplete = sorted((repo / "blobs").glob("*.incomplete")) if (repo / "blobs").is_dir() else []
+    for f in incomplete:
+        print(f"  partial   {f.name} ({_human(f.stat().st_size)}, a download that never finished)")
+
+    snapshots = sorted((repo / "snapshots").iterdir()) if (repo / "snapshots").is_dir() else []
+    snapshots = [d for d in snapshots if d.is_dir()]
+    if not snapshots:
+        print("FAIL no snapshot directory - nothing was ever fully downloaded")
+        return 1
+
+    problems = []
+    for snap in snapshots:
+        print(f"  snapshot  {snap.name}")
+        names = {p.name for p in snap.iterdir()}
+        for want in WHISPER_REQUIRED:
+            f = snap / want
+            if want not in names:
+                problems.append(f"{want} missing from snapshot {snap.name}")
+                print(f"    [--] {want}  MISSING")
+                continue
+            try:
+                size = f.stat().st_size          # follows the blob symlink
+            except OSError as e:
+                problems.append(f"{want} unreadable ({e})")
+                print(f"    [--] {want}  UNREADABLE - dangling link into blobs/")
+                continue
+            if want == "model.bin" and size < WHISPER_MODEL_MIN_BYTES:
+                problems.append(f"model.bin is only {_human(size)}, expected ~3.1 GB")
+                print(f"    [--] {want}  {_human(size)} - truncated")
+            else:
+                print(f"    [ok] {want}  {_human(size)}")
+        if not (names & set(WHISPER_EITHER)):
+            problems.append(f"neither {' nor '.join(WHISPER_EITHER)} in snapshot {snap.name}")
+            print(f"    [--] {' / '.join(WHISPER_EITHER)}  MISSING")
+
+    if problems:
+        for pr in problems:
+            print(f"FAIL {pr}")
+        return 1
+    if incomplete:
+        print("  note      the .incomplete leftovers above are safe to delete")
+
+    # Files being present is necessary but NOT sufficient. huggingface_hub
+    # resolves "which commit is main" through refs/main; without it the cache
+    # cannot be used offline at all, and faster-whisper falls back to the Hub
+    # and dies with LocalEntryNotFoundError even though every byte is on disk.
+    # Reproduced in the sandbox: two identical caches, one with refs/main and
+    # one without, resolve and fail respectively. So run the real resolution.
+    ref = repo / "refs" / "main"
+    if ref.is_file():
+        print(f"  refs/main {ref.read_text(encoding='utf-8').strip()[:12]}...")
+    else:
+        print("    [--] refs/main  MISSING - the cache cannot be resolved offline")
+        print("FAIL refs/main is missing; huggingface_hub cannot tell which "
+              "snapshot 'main' is without asking the Hub")
+        if len(snapshots) == 1:
+            # Written through Python, not `echo >`: PowerShell 5.1's redirection
+            # emits UTF-16LE, which huggingface_hub cannot read back.
+            print("  repair (one snapshot, so the mapping is unambiguous):")
+            print(f'    python -c "from pathlib import Path; p=Path(r\'{ref}\');'
+                  f' p.parent.mkdir(parents=True, exist_ok=True);'
+                  f' p.write_text(\'{snapshots[0].name}\')"')
+        else:
+            print(f"  {len(snapshots)} snapshots present, so which one 'main' means "
+                  f"is a guess; re-download instead:")
+            for snap in snapshots:
+                print(f"    {snap.name}")
+        return 1
+
+    try:
+        from huggingface_hub import snapshot_download
+        path = snapshot_download(
+            "Systran/faster-whisper-large-v3",
+            allow_patterns=list(WHISPER_REQUIRED) + list(WHISPER_EITHER)
+            + ["preprocessor_config.json"],
+            local_files_only=True,
+            cache_dir=str(home / "hub"),
+        )
+        print(f"  resolved  {path}")
+    except Exception as e:
+        print(f"FAIL offline resolution failed: {type(e).__name__}: "
+              f"{str(e).splitlines()[0][:100]}")
+        return 1
+
+    print("PASS large-v3 cache is complete and resolves offline")
+    return 0
 
 
 def smoke_gate() -> int:
@@ -153,6 +280,7 @@ COMMANDS = {
     "quiz":  smoke_quiz,
     "audio": smoke_audio,
     "gate":  smoke_gate,
+    "whisper": smoke_whisper,
 }
 
 
