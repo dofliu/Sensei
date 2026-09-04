@@ -42,10 +42,16 @@ Write-Host ""
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     Die "ollama not found on PATH. Install from https://ollama.com and re-run."
 }
-$ollamaUrl = "http://localhost:11434/api/tags"
+$ollamaUrl = "http://127.0.0.1:11434/api/tags"
 function OllamaUp {
     try { Invoke-RestMethod -Uri $ollamaUrl -TimeoutSec 2 | Out-Null; return $true }
-    catch { return $false }
+    catch {
+        # Fallback to ollama CLI check if REST endpoint fails
+        try {
+            & ollama list 2>$null | Out-Null
+            return ($LASTEXITCODE -eq 0)
+        } catch { return $false }
+    }
 }
 if (OllamaUp) {
     Ok "Ollama daemon is running"
@@ -58,10 +64,19 @@ if (OllamaUp) {
 }
 
 # 2. Model -----------------------------------------------------------
-$tags = Invoke-RestMethod -Uri $ollamaUrl -TimeoutSec 5
+$tags = $null
+try { $tags = Invoke-RestMethod -Uri $ollamaUrl -TimeoutSec 5 } catch { }
 $have = @()
-if ($tags.models) { $have = $tags.models | ForEach-Object { $_.name } }
-if ($have -contains $Model) {
+if ($tags -and $tags.models) {
+    $have = $tags.models | ForEach-Object { $_.name }
+} else {
+    $list = ollama list 2>&1 | Out-String
+    foreach ($line in ($list -split "`n")) {
+        $m = ($line -split "\s+")[0].Trim()
+        if ($m) { $have += $m }
+    }
+}
+if ($have -contains $Model -or $have -contains "$Model`:latest") {
     Ok "Model $Model is available"
 } else {
     Warn "Model $Model is not pulled yet (have: $($have -join ', '))"
@@ -81,7 +96,7 @@ if ($LASTEXITCODE -ne 0) {
 Ok "Python deps import"
 
 # 4. Start the app ----------------------------------------------------
-$displayUrl = "http://localhost:$Port/display"
+$displayUrl = "http://127.0.0.1:$Port/display"
 try { Invoke-WebRequest -Uri $displayUrl -TimeoutSec 2 -UseBasicParsing | Out-Null; $already = $true } catch { $already = $false }
 if ($already) {
     Warn "Something already answers on port $Port; not starting a second Sensei."

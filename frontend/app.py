@@ -1,4 +1,4 @@
-"""
+r"""
 Sensei · Operator console (Gradio)
 ================================
 Run:   python -m frontend.app        (or .\start_sensei.ps1 on Windows)
