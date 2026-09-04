@@ -156,11 +156,17 @@ def smoke_whisper() -> int:
     # and dies with LocalEntryNotFoundError even though every byte is on disk.
     # Reproduced in the sandbox: two identical caches, one with refs/main and
     # one without, resolve and fail respectively. So run the real resolution.
+    # Raw bytes, never .strip(). huggingface_hub reads this file with a plain
+    # f.read() and concatenates the result straight into the snapshots path, so
+    # one trailing newline, a CRLF or a BOM makes a byte-perfect cache
+    # unresolvable - with an error that says nothing about whitespace.
+    # Verified in the sandbox: LF, CRLF, a UTF-8 BOM and a leading space each
+    # reproduce LocalEntryNotFoundError on an otherwise working cache.
     refs_dir = repo / "refs"
     if refs_dir.is_dir():
         for r in sorted(refs_dir.iterdir()):
             try:
-                print(f"  refs/{r.name:<9} {r.read_text(encoding='utf-8').strip()}")
+                print(f"  refs/{r.name:<9} {r.read_bytes()!r}")
             except Exception as e:
                 print(f"  refs/{r.name:<9} UNREADABLE ({e})")
     else:
@@ -183,6 +189,31 @@ def smoke_whisper() -> int:
                   f"is a guess; re-download instead:")
             for snap in snapshots:
                 print(f"    {snap.name}")
+        return 1
+
+    raw = ref.read_bytes()
+    try:
+        clean = raw.decode("utf-8-sig").strip()
+    except UnicodeDecodeError:
+        print("  note      refs/main is not UTF-8; most likely written with "
+              "PowerShell's `echo > file`, which emits UTF-16LE")
+        try:
+            clean = raw.decode("utf-16").strip()   # recoverable, so still repairable
+        except UnicodeDecodeError:
+            clean = ""
+    if not clean or clean != raw.decode("utf-8", "replace"):
+        target = repo / "snapshots" / clean
+        print(f"FAIL refs/main holds {raw!r}, which is not exactly the "
+              f"40-character commit id")
+        print("  huggingface_hub does not strip it: it joins the bytes straight "
+              "onto snapshots/, so the folder is never found.")
+        if clean and target.is_dir():
+            print(f"  snapshots/{clean} does exist, so rewriting the ref fixes it:")
+            print(f'    python -c "from pathlib import Path;'
+                  f' Path(r\'{ref}\').write_bytes(b\'{clean}\')"')
+        else:
+            print(f"  and snapshots/{clean or '?'} does not exist either - "
+                  f"re-download instead")
         return 1
 
     # Resolve the way faster-whisper itself does, not an approximation of it.
