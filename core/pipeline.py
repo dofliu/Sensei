@@ -5,6 +5,7 @@ audio (file or array) ──► ASR ──► text ──► LLM ──► struc
 """
 
 import re
+import time
 from pathlib import Path
 
 from .asr import SenseiASR
@@ -115,10 +116,22 @@ class SenseiPipeline:
     def process_utterance_audio(self, audio, sample_rate: int = 16000,
                                 template_hint: str | None = None) -> dict:
         """One VAD-segmented float32 mono buffer → card or recorded skip.
-        This is what the continuous listener's worker calls."""
+        This is what the continuous listener's worker calls.
+
+        ASR and LLM are timed separately. When the queue starts dropping, the
+        only useful question is which of the two is eating the budget, and
+        guessing at it is how you tune the wrong constant.
+        """
+        t0 = time.perf_counter()
         text = self.asr.transcribe_array(audio, sample_rate=sample_rate)
-        print(f"[Pipeline] Utterance: {text}", flush=True)
-        return self.process_utterance(text, template_hint=template_hint)
+        asr_ms = int((time.perf_counter() - t0) * 1000)
+        audio_s = round(len(audio) / sample_rate, 1)
+        print(f"[Pipeline] Utterance ({audio_s}s audio, ASR {asr_ms} ms): {text}",
+              flush=True)
+        result = self.process_utterance(text, template_hint=template_hint)
+        result["_asr_ms"] = asr_ms
+        result["_audio_s"] = audio_s
+        return result
 
     def process_utterance(self, text: str, template_hint: str | None = None) -> dict:
         """One VAD-segmented utterance → a card, or a recorded skip.
@@ -139,7 +152,9 @@ class SenseiPipeline:
         hint = self._resolve_hint(text, template_hint)
         if hint is not None:
             gate = "quiz-phrase" if template_hint is None else "operator"
+            t0 = time.perf_counter()
             result = self.llm.structurize(text, template_hint=hint)
+            result["_llm_ms"] = int((time.perf_counter() - t0) * 1000)
             result["_gate"] = gate
             result["_transcript"] = text
             return result
@@ -147,10 +162,15 @@ class SenseiPipeline:
         n = content_length(text)
         if n < GATE_MIN_CONTENT:
             print(f"[Pipeline] gate: skipped (content={n} < {GATE_MIN_CONTENT}) {text!r}", flush=True)
-            return {"template": "no_card", "reason": "too short",
+            # The rule layer is the only path that costs no LLM call at all,
+            # which is exactly why raising GATE_MIN_CONTENT is the first lever
+            # to reach for when the queue starts dropping.
+            return {"template": "no_card", "reason": "too short", "_llm_ms": 0,
                     "_gate": "too-short", "_content": n, "_transcript": text}
 
+        t0 = time.perf_counter()
         result = self.llm.structurize(text, allow_no_card=True)
+        result["_llm_ms"] = int((time.perf_counter() - t0) * 1000)
         if result.get("template") == "no_card":
             print(f"[Pipeline] gate: model skipped ({result.get('reason', '')}) {text!r}", flush=True)
             result["_gate"] = "no-card"

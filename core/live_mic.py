@@ -143,17 +143,24 @@ QUEUE_MAX_PENDING    = 2      # beyond this, drop the OLDEST pending utterance
 class ContinuousListener:
     """Always-on mic → utterances → a single worker thread.
 
-    `on_utterance(audio, samplerate)` runs on that worker, one at a time, so
-    ASR and the LLM never overlap. If the teacher out-runs the pipeline the
-    queue drops the *oldest* pending utterance: a card for something said a
-    minute ago is worse than no card at all (PROPOSAL B1).
+    `on_utterance(audio, samplerate, queued_s)` runs on that worker, one at a
+    time, so ASR and the LLM never overlap. `queued_s` is how long the
+    utterance sat waiting, which is the number that says whether cards are
+    arriving late. If the teacher out-runs the pipeline the queue drops the
+    *oldest* pending utterance: a card for something said a minute ago is
+    worse than no card at all (PROPOSAL B1).
+
+    `on_dropped(duration_s)` fires for each dropped utterance. Without it a
+    drop leaves no trace anywhere - no card, no skip entry - and a lecture's
+    record silently omits what the teacher actually said.
     """
 
     def __init__(self, on_utterance, samplerate: int = SAMPLE_RATE,
                  channels: int = 1, max_pending: int = QUEUE_MAX_PENDING,
-                 on_state=None):
+                 on_state=None, on_dropped=None):
         self.on_utterance = on_utterance
         self.on_state = on_state          # optional: called with the stats dict
+        self.on_dropped = on_dropped      # optional: called with the lost seconds
         self.samplerate = samplerate
         self.channels = channels
         self.max_pending = max_pending
@@ -167,7 +174,8 @@ class ContinuousListener:
         self._running = False
 
         self._reset_segmenter()
-        self.stats = {"utterances": 0, "too_short": 0, "dropped": 0, "forced": 0}
+        self.stats = {"utterances": 0, "too_short": 0, "dropped": 0,
+                      "dropped_s": 0.0, "forced": 0}
 
     # ── lifecycle ────────────────────────────────────────────────────
     @property
@@ -332,13 +340,20 @@ class ContinuousListener:
     def _enqueue(self, audio: np.ndarray) -> None:
         while self._queue.qsize() >= self.max_pending:
             try:
-                self._queue.get_nowait()
+                stale, _ = self._queue.get_nowait()
             except queue.Empty:
                 break
+            lost = len(stale) / self.samplerate
             self.stats["dropped"] += 1
-            print("[LiveMic] queue full — dropped the oldest pending utterance",
-                  flush=True)
-        self._queue.put(audio)
+            self.stats["dropped_s"] = round(self.stats["dropped_s"] + lost, 1)
+            print(f"[LiveMic] queue full — dropped the oldest pending utterance "
+                  f"({lost:.1f}s)", flush=True)
+            if self.on_dropped is not None:
+                try:
+                    self.on_dropped(lost)
+                except Exception as e:
+                    print(f"[LiveMic] on_dropped raised: {e}", flush=True)
+        self._queue.put((audio, time.monotonic()))
         self._notify()
 
     def _notify(self) -> None:
@@ -353,8 +368,10 @@ class ContinuousListener:
             item = self._queue.get()
             if item is None:
                 break
+            audio, queued_at = item
             try:
-                self.on_utterance(item, self.samplerate)
+                self.on_utterance(audio, self.samplerate,
+                                  time.monotonic() - queued_at)
             except Exception as e:
                 print(f"[LiveMic] on_utterance raised: {e}", flush=True)
             finally:
