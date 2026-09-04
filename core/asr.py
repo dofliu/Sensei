@@ -8,6 +8,13 @@ Why Faster-Whisper:
 - Built-in VAD (voice activity detection) cuts silence
 - INT8/float16 quantization fits alongside Gemma 4 on RTX 4080 (12GB)
 
+Why the model loads offline-first:
+- Sensei's whole pitch includes "works in a classroom with no connectivity".
+  faster-whisper's default is to ask the Hub which commit `main` points at on
+  every single startup, so a laptop with the model already cached still fails
+  to start when the network (or the hf-mirror) is unreachable. We try the
+  local cache first and only touch the network when that genuinely misses.
+
 Why custom initial_prompt:
 - Whisper severely under-recognizes engineering jargon by default
 - Domain prompt cuts term WER (word error rate) by ~40-60% in our tests
@@ -44,14 +51,29 @@ class SenseiASR:
     Whisper wrapper. Loads once, transcribes many times.
     """
 
+    def _load(self, local_files_only: bool) -> WhisperModel:
+        return WhisperModel(
+            self.config.MODEL_SIZE,
+            device=self.config.DEVICE,
+            compute_type=self.config.COMPUTE_TYPE,
+            local_files_only=local_files_only,
+        )
+
     def __init__(self, config: ASRConfig = ASRConfig()):
         self.config = config
         print(f"[Sensei ASR] Loading Whisper {config.MODEL_SIZE} ({config.COMPUTE_TYPE})...")
-        self.model = WhisperModel(
-            config.MODEL_SIZE,
-            device=config.DEVICE,
-            compute_type=config.COMPUTE_TYPE,
-        )
+        # Offline first. huggingface_hub's cache-miss and offline errors are
+        # both OSError subclasses (LocalEntryNotFoundError -> FileNotFoundError,
+        # OfflineModeIsEnabled -> ConnectionError), which is narrow enough to
+        # not swallow a CUDA or compute-type failure and retry it slowly.
+        try:
+            self.model = self._load(local_files_only=True)
+            print("[Sensei ASR] served from the local cache; no network used.")
+        except OSError as e:
+            print(f"[Sensei ASR] not loadable from the cache ({type(e).__name__}); "
+                  f"asking the Hub. This needs a network and only happens on a "
+                  f"first run or a damaged cache.", flush=True)
+            self.model = self._load(local_files_only=False)
         # Runtime-switchable (operator UI): lecture language + course glossary.
         self.language: str | None = config.LANGUAGE
         self.initial_prompt: str = config.INITIAL_PROMPT

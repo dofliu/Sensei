@@ -148,7 +148,50 @@ def smoke_whisper() -> int:
         return 1
     if incomplete:
         print("  note      the .incomplete leftovers above are safe to delete")
-    print("PASS large-v3 cache is complete and loadable offline")
+
+    # Files being present is necessary but NOT sufficient. huggingface_hub
+    # resolves "which commit is main" through refs/main; without it the cache
+    # cannot be used offline at all, and faster-whisper falls back to the Hub
+    # and dies with LocalEntryNotFoundError even though every byte is on disk.
+    # Reproduced in the sandbox: two identical caches, one with refs/main and
+    # one without, resolve and fail respectively. So run the real resolution.
+    ref = repo / "refs" / "main"
+    if ref.is_file():
+        print(f"  refs/main {ref.read_text(encoding='utf-8').strip()[:12]}...")
+    else:
+        print("    [--] refs/main  MISSING - the cache cannot be resolved offline")
+        print("FAIL refs/main is missing; huggingface_hub cannot tell which "
+              "snapshot 'main' is without asking the Hub")
+        if len(snapshots) == 1:
+            # Written through Python, not `echo >`: PowerShell 5.1's redirection
+            # emits UTF-16LE, which huggingface_hub cannot read back.
+            print("  repair (one snapshot, so the mapping is unambiguous):")
+            print(f'    python -c "from pathlib import Path; p=Path(r\'{ref}\');'
+                  f' p.parent.mkdir(parents=True, exist_ok=True);'
+                  f' p.write_text(\'{snapshots[0].name}\')"')
+        else:
+            print(f"  {len(snapshots)} snapshots present, so which one 'main' means "
+                  f"is a guess; re-download instead:")
+            for snap in snapshots:
+                print(f"    {snap.name}")
+        return 1
+
+    try:
+        from huggingface_hub import snapshot_download
+        path = snapshot_download(
+            "Systran/faster-whisper-large-v3",
+            allow_patterns=list(WHISPER_REQUIRED) + list(WHISPER_EITHER)
+            + ["preprocessor_config.json"],
+            local_files_only=True,
+            cache_dir=str(home / "hub"),
+        )
+        print(f"  resolved  {path}")
+    except Exception as e:
+        print(f"FAIL offline resolution failed: {type(e).__name__}: "
+              f"{str(e).splitlines()[0][:100]}")
+        return 1
+
+    print("PASS large-v3 cache is complete and resolves offline")
     return 0
 
 
