@@ -72,6 +72,7 @@ def smoke_quiz() -> int:
 # Files faster-whisper opens when it loads a CTranslate2 Whisper model.
 # vocabulary.json (large-v3) and vocabulary.txt (older conversions) are
 # alternatives, so they are checked as a pair.
+WHISPER_SIZE = "large-v3"
 WHISPER_REPO = "models--Systran--faster-whisper-large-v3"
 WHISPER_REQUIRED = ("model.bin", "config.json", "tokenizer.json")
 WHISPER_EITHER = ("vocabulary.json", "vocabulary.txt")
@@ -155,10 +156,18 @@ def smoke_whisper() -> int:
     # and dies with LocalEntryNotFoundError even though every byte is on disk.
     # Reproduced in the sandbox: two identical caches, one with refs/main and
     # one without, resolve and fail respectively. So run the real resolution.
-    ref = repo / "refs" / "main"
-    if ref.is_file():
-        print(f"  refs/main {ref.read_text(encoding='utf-8').strip()[:12]}...")
+    refs_dir = repo / "refs"
+    if refs_dir.is_dir():
+        for r in sorted(refs_dir.iterdir()):
+            try:
+                print(f"  refs/{r.name:<9} {r.read_text(encoding='utf-8').strip()}")
+            except Exception as e:
+                print(f"  refs/{r.name:<9} UNREADABLE ({e})")
     else:
+        print("  refs/     directory does not exist")
+
+    ref = refs_dir / "main"
+    if not ref.is_file():
         print("    [--] refs/main  MISSING - the cache cannot be resolved offline")
         print("FAIL refs/main is missing; huggingface_hub cannot tell which "
               "snapshot 'main' is without asking the Hub")
@@ -176,22 +185,30 @@ def smoke_whisper() -> int:
                 print(f"    {snap.name}")
         return 1
 
+    # Resolve the way faster-whisper itself does, not an approximation of it.
+    # download_model() only resolves and returns a path - no GPU, no model load -
+    # so this reproduces the exact failure step 7 hits, in a second.
     try:
-        from huggingface_hub import snapshot_download
-        path = snapshot_download(
-            "Systran/faster-whisper-large-v3",
-            allow_patterns=list(WHISPER_REQUIRED) + list(WHISPER_EITHER)
-            + ["preprocessor_config.json"],
-            local_files_only=True,
-            cache_dir=str(home / "hub"),
-        )
+        import faster_whisper
+        from faster_whisper.utils import download_model
+    except Exception as e:
+        print(f"FAIL cannot import faster_whisper: {e}")
+        return 1
+    print(f"  fw        faster-whisper {getattr(faster_whisper, '__version__', '?')}")
+
+    try:
+        path = download_model(WHISPER_SIZE, local_files_only=True)
         print(f"  resolved  {path}")
     except Exception as e:
-        print(f"FAIL offline resolution failed: {type(e).__name__}: "
-              f"{str(e).splitlines()[0][:100]}")
+        print(f"FAIL faster-whisper cannot resolve {WHISPER_SIZE} offline: "
+              f"{type(e).__name__}")
+        for line in str(e).splitlines()[:4]:
+            print(f"    {line[:110]}")
+        print("  This is the same failure step 7 hits. The files above are")
+        print("  present, so the problem is the revision lookup, not the data.")
         return 1
 
-    print("PASS large-v3 cache is complete and resolves offline")
+    print(f"PASS {WHISPER_SIZE} resolves offline; a lecture starts with no network")
     return 0
 
 
