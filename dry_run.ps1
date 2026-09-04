@@ -15,6 +15,9 @@ $pass = 0
 $fail = 0
 $warn = 0
 $failed_steps = @()
+# Set by step 3; steps 6 and 7 cannot run without the model and would
+# otherwise report the same missing model as two more independent failures.
+$model_ready = $false
 
 function Step([string]$title, [scriptblock]$block) {
     Write-Host ""
@@ -26,8 +29,13 @@ function Fail([string]$msg) { Write-Host "  [FAIL] $msg" -ForegroundColor Red;  
 function Warn([string]$msg) { Write-Host "  [WARN] $msg" -ForegroundColor Yellow; $script:warn++ }
 function Hint([string]$msg) { Write-Host "         $msg" -ForegroundColor DarkGray }
 
-# Force UTF-8 for any child process stdout that prints Chinese (smoke helper).
+# Force UTF-8 in both directions for child processes that print Chinese.
+# PYTHONIOENCODING makes Python emit UTF-8; without the Console line below,
+# PowerShell 5.1 decodes that stdout with the system code page (CP950 here)
+# and the transcripts come back as mojibake. Wrapped because some hosts
+# refuse the assignment when stdout is redirected.
 $env:PYTHONIOENCODING = "utf-8"
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
 Write-Host ""
 Write-Host " Sensei preflight " -ForegroundColor White -BackgroundColor DarkBlue
@@ -71,9 +79,14 @@ Step "3. Ollama daemon + gemma4:e2b model" {
     Ok "Ollama daemon reachable"
     if ($list -match "gemma4:e2b") {
         Ok "gemma4:e2b is pulled"
+        $script:model_ready = $true
     } else {
         Fail "gemma4:e2b not pulled"
-        Hint "Run: ollama pull gemma4:e2b"
+        Hint "Run: ollama pull gemma4:e2b   (one-time ~7 GB download)"
+        Hint "What 'ollama list' actually returned:"
+        foreach ($line in ($list -split "`n")) {
+            if ($line.Trim()) { Hint "  $($line.TrimEnd())" }
+        }
     }
 }
 
@@ -102,6 +115,10 @@ Step "5. Audio input devices (confirm your external mic is listed)" {
 
 # 6. LLM smoke (enumeration)
 Step "6. LLM smoke: canonical PID prompt -> expect enumeration_cards" {
+    if (-not $model_ready) {
+        Warn "skipped - needs gemma4:e2b (see step 3)"
+        return
+    }
     $out = python dry_run_smoke.py enum 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0 -and $out -match "PASS") {
         Ok "model correctly picked enumeration_cards"
@@ -113,6 +130,10 @@ Step "6. LLM smoke: canonical PID prompt -> expect enumeration_cards" {
 
 # 7. Pipeline smoke + quiz spoken-trigger
 Step "7. Pipeline smoke: quiz wake-phrase -> expect quiz_card + trigger fired" {
+    if (-not $model_ready) {
+        Warn "skipped - needs gemma4:e2b (see step 3)"
+        return
+    }
     Hint "(loads Whisper too, ~20-30 s)"
     $out = python dry_run_smoke.py quiz 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0 -and $out -match "PASS") {
